@@ -142,7 +142,7 @@ begin
     return null;
   end if;
 
-  if matched_member.passcode_hash <> crypt(member_passcode, matched_member.passcode_hash) then
+  if matched_member.passcode_hash <> extensions.crypt(member_passcode, matched_member.passcode_hash) then
     return null;
   end if;
 
@@ -177,7 +177,7 @@ begin
   insert into public.members (display_name, passcode_hash, preferred_currency)
   values (
     trim(member_name),
-    crypt(member_passcode, gen_salt('bf')),
+    extensions.crypt(member_passcode, extensions.gen_salt('bf')),
     normalized_currency
   )
   returning id into new_member_id;
