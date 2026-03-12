@@ -4,7 +4,7 @@ validateConfig();
 
 const { createClient } = window.supabase;
 
-export const supabase = createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY, {
+export const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabaseAnonKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false
