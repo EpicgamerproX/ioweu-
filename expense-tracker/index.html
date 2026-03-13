@@ -36,7 +36,7 @@
       <section class="panel panel--auth" id="auth-panel">
         <div class="panel__header">
           <p class="panel__kicker">Access</p>
-          <h2>Log in or create your room</h2>
+          <h2>Log in or create your account</h2>
         </div>
 
         <div class="tabs" role="tablist" aria-label="Authentication options">
@@ -80,11 +80,7 @@
                 <input id="signup-currency" name="currency" type="text" maxlength="3" value="INR" required>
               </label>
             </div>
-            <label class="field">
-              <span>Initial room name</span>
-              <input id="signup-room-name" name="roomName" type="text" placeholder="Weekend Trip" required>
-            </label>
-            <button class="button button--accent" type="submit">Create account and room</button>
+            <button class="button button--accent" type="submit">Create account</button>
           </form>
         </div>
 
@@ -127,11 +123,40 @@
             <span>Active room</span>
             <select id="group-select"></select>
           </label>
-          <form id="join-room-form" class="inline-form">
-            <input id="join-room-key" name="roomKey" type="text" placeholder="Enter room key" maxlength="12" required>
-            <button class="button button--ghost" type="submit">Join room</button>
-          </form>
+          <div class="room-actions">
+            <button class="button button--accent" id="create-room-toggle" type="button">Create room</button>
+            <form id="join-room-form" class="inline-form">
+              <input id="join-room-key" name="roomKey" type="text" placeholder="Enter room id" maxlength="12" required>
+              <button class="button button--ghost" type="submit">Join room</button>
+            </form>
+          </div>
         </div>
+
+        <section class="room-creator" id="create-room-panel" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="panel__kicker">Create room</p>
+              <h3>Name a room and pick its room ID</h3>
+            </div>
+          </div>
+          <form id="create-room-form" class="stack">
+            <div class="grid-2">
+              <label class="field">
+                <span>Room name</span>
+                <input id="create-room-name" name="roomName" type="text" placeholder="Weekend Trip" required>
+              </label>
+              <label class="field">
+                <span>Room ID</span>
+                <input id="create-room-key" name="roomKey" type="text" placeholder="TRIP2026" maxlength="12" required>
+              </label>
+            </div>
+            <div class="room-creator__actions">
+              <button class="button button--ghost" id="create-room-cancel" type="button">Cancel</button>
+              <button class="button button--primary" type="submit">Create room</button>
+            </div>
+          </form>
+          <p class="status-message" id="create-room-status" aria-live="polite"></p>
+        </section>
 
         <div class="summary-grid" id="summary-grid">
           <article class="metric-card">
@@ -253,22 +278,51 @@
 
             <p class="status-message" id="expense-status" aria-live="polite"></p>
 
-            <div class="settlement-panel">
+            <div class="amount-builder">
               <div class="section-heading">
                 <div>
-                  <p class="panel__kicker">Record payment</p>
-                  <h3>Log money you already paid back</h3>
+                  <p class="panel__kicker">Amount builder</p>
+                  <h3>Build the expense amount with the dial</h3>
                 </div>
               </div>
-              <div class="settlement-panel__controls">
-                <label class="field" for="settlement-payee-select">
-                  <span>Who did you pay?</span>
-                  <select id="settlement-payee-select"></select>
-                </label>
-                <p class="payment-sheet__hint" id="payment-sheet-hint">Long-press any base amount to open the radial add-on wheel.</p>
+
+              <div class="amount-builder__ledger">
+                <div class="table-shell">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Entry</th>
+                        <th>Amount</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="amount-builder-body">
+                      <tr>
+                        <td colspan="3">
+                          <div class="empty-state">Tap a base amount to start building the total.</div>
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th>Subtotal</th>
+                        <th id="amount-builder-total">Rs0.00</th>
+                        <th></th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
+
+              <p class="payment-sheet__hint" id="payment-sheet-hint">Tap to add the base amount. Long-press for vibration and the 10-90 add-on wheel.</p>
               <div id="cash-selector-root" class="cash-selector-root"></div>
-              <p class="status-message" id="payment-status" aria-live="polite"></p>
+
+              <div class="amount-builder__actions">
+                <button class="button button--ghost" id="amount-builder-clear" type="button">Clear</button>
+                <button class="button button--primary" id="amount-builder-confirm" type="button">Confirm amount</button>
+              </div>
+
+              <p class="status-message" id="amount-builder-status" aria-live="polite"></p>
             </div>
           </div>
 

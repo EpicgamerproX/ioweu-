@@ -83,7 +83,7 @@ export class CashSelector {
     this.elements.buttons.forEach((button) => {
       button.addEventListener("pointerdown", (event) => this.handleButtonPointerDown(event, button));
       button.addEventListener("pointermove", (event) => this.handleButtonPointerMove(event));
-      button.addEventListener("pointerup", () => this.cancelHold());
+      button.addEventListener("pointerup", (event) => this.handleButtonPointerUp(event, button));
       button.addEventListener("pointercancel", () => this.cancelHold());
       button.addEventListener("pointerleave", () => this.handleButtonPointerLeave());
     });
@@ -121,6 +121,25 @@ export class CashSelector {
     if (!this.state.overlayOpen) {
       this.cancelHold();
     }
+  }
+
+  handleButtonPointerUp(event, button) {
+    if (this.state.overlayOpen) {
+      return;
+    }
+
+    const shouldEmitBase = Boolean(this.state.holdTimer)
+      && this.state.activeButton === button
+      && this.state.pointerId === event.pointerId;
+
+    this.cancelHold();
+
+    if (!shouldEmitBase) {
+      return;
+    }
+
+    const baseValue = Number(button.dataset.baseValue || 0);
+    this.emitSelection(baseValue, 0);
   }
 
   openWheel(button) {
@@ -221,21 +240,9 @@ export class CashSelector {
     const radialValue = this.state.activeSegmentIndex >= 0
       ? RADIAL_VALUES[this.state.activeSegmentIndex]
       : 0;
-
-    const amount = Number(this.state.baseValue || 0) + Number(radialValue || 0);
-    const sourceButton = Number(this.state.baseValue || 0);
-
-    this.showToast(`Recorded ${amount}`);
+    const baseValue = Number(this.state.baseValue || 0);
     this.closeWheel();
-
-    this.root.dispatchEvent(new CustomEvent("cashValueSelected", {
-      bubbles: true,
-      detail: {
-        amount,
-        timestamp: new Date().toISOString(),
-        sourceButton
-      }
-    }));
+    this.emitSelection(baseValue, radialValue);
   }
 
   closeWheel() {
@@ -258,6 +265,7 @@ export class CashSelector {
 
     this.state.overlayOpen = false;
     this.state.baseValue = null;
+    this.state.startPoint = null;
     this.state.pendingPoint = null;
     this.state.pointerId = null;
     this.state.activeButton = null;
@@ -291,6 +299,23 @@ export class CashSelector {
     this.state.toastTimer = window.setTimeout(() => {
       this.elements.toast.classList.remove("is-visible");
     }, 1600);
+  }
+
+  emitSelection(baseValue, radialValue) {
+    const amount = Number(baseValue || 0) + Number(radialValue || 0);
+    const label = radialValue ? `${baseValue} + ${radialValue}` : `${baseValue}`;
+
+    this.showToast(`Added ${label}`);
+    this.root.dispatchEvent(new CustomEvent("cashValueSelected", {
+      bubbles: true,
+      detail: {
+        amount,
+        baseValue,
+        radialValue,
+        label,
+        timestamp: new Date().toISOString()
+      }
+    }));
   }
 }
 

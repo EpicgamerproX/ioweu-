@@ -336,6 +336,112 @@ begin
 end;
 $$;
 
+create or replace function public.signup_member(
+  member_display_name text,
+  member_email text,
+  member_password text,
+  preferred_currency text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_member_id uuid;
+  session_token uuid;
+  normalized_currency text := upper(coalesce(nullif(trim(preferred_currency), ''), 'INR'));
+  normalized_email text := public.normalize_email(member_email);
+begin
+  if exists (
+    select 1
+    from public.members
+    where lower(email) = normalized_email
+  ) then
+    raise exception 'An account with this email already exists';
+  end if;
+
+  insert into public.members (display_name, email, password_hash, preferred_currency)
+  values (
+    trim(member_display_name),
+    normalized_email,
+    extensions.crypt(member_password, extensions.gen_salt('bf')),
+    normalized_currency
+  )
+  returning id into new_member_id;
+
+  session_token := public.create_session(new_member_id);
+
+  return jsonb_build_object(
+    'member_id', new_member_id,
+    'display_name', trim(member_display_name),
+    'email', normalized_email,
+    'preferred_currency', normalized_currency,
+    'session_token', session_token
+  );
+end;
+$$;
+
+create or replace function public.create_group_for_member(
+  session_token_input uuid,
+  new_group_name text,
+  room_key_input text,
+  preferred_currency text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_member_id uuid;
+  new_group_id uuid;
+  resolved_room_key text;
+  resolved_currency text;
+begin
+  current_member_id := public.require_valid_session(session_token_input);
+  resolved_room_key := upper(trim(coalesce(room_key_input, '')));
+
+  if resolved_room_key = '' then
+    resolved_room_key := public.generate_room_key();
+  elsif exists (
+    select 1
+    from public.groups
+    where room_key = resolved_room_key
+  ) then
+    raise exception 'Room ID already exists';
+  end if;
+
+  resolved_currency := upper(coalesce(
+    nullif(trim(preferred_currency), ''),
+    (
+      select preferred_currency
+      from public.members
+      where id = current_member_id
+    ),
+    'INR'
+  ));
+
+  insert into public.groups (name, room_key, currency_code, created_by_member_id)
+  values (trim(new_group_name), resolved_room_key, resolved_currency, current_member_id)
+  returning id into new_group_id;
+
+  insert into public.group_members (group_id, member_id, is_active)
+  values (new_group_id, current_member_id, true)
+  on conflict (group_id, member_id)
+  do update set
+    is_active = true,
+    joined_at = timezone('utc', now());
+
+  return jsonb_build_object(
+    'group_id', new_group_id,
+    'group_name', trim(new_group_name),
+    'room_key', resolved_room_key,
+    'currency_code', resolved_currency
+  );
+end;
+$$;
+
 create or replace function public.get_member_groups(session_token_input uuid)
 returns jsonb
 language plpgsql

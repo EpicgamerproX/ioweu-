@@ -36,13 +36,12 @@ export async function loginMember(email, password) {
   return data;
 }
 
-export async function signUpMember({ displayName, email, password, roomName, currency }) {
+export async function signUpMember({ displayName, email, password, currency }) {
   const data = await unwrapSingle(
-    supabase.rpc("signup_member_with_group", {
+    supabase.rpc("signup_member", {
       member_display_name: displayName.trim(),
       member_email: email.trim(),
       member_password: password,
-      initial_group_name: roomName.trim(),
       preferred_currency: currency.trim().toUpperCase()
     }),
     "Unable to create account."
@@ -53,6 +52,18 @@ export async function signUpMember({ displayName, email, password, roomName, cur
   }
 
   return data;
+}
+
+export async function createGroupForMember(sessionToken, { roomName, roomKey, currency }) {
+  return unwrapSingle(
+    supabase.rpc("create_group_for_member", {
+      session_token_input: sessionToken,
+      new_group_name: roomName.trim(),
+      room_key_input: roomKey.trim().toUpperCase(),
+      preferred_currency: (currency || "").trim().toUpperCase()
+    }),
+    "Unable to create room."
+  );
 }
 
 export async function fetchGroupsForMember(sessionToken) {

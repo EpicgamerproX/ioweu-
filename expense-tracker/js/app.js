@@ -1,7 +1,7 @@
 import { APP_CONFIG } from "./config.js";
 import {
+  createGroupForMember,
   createExpense,
-  createSettlement,
   deleteExpense,
   fetchExpenses,
   fetchGroupMembers,
@@ -22,7 +22,8 @@ const state = {
   settlements: [],
   balances: [],
   debtRows: [],
-  summary: null
+  summary: null,
+  amountEntries: []
 };
 
 const elements = {
@@ -30,10 +31,17 @@ const elements = {
   workspacePanel: document.querySelector("#workspace-panel"),
   authStatus: document.querySelector("#auth-status"),
   expenseStatus: document.querySelector("#expense-status"),
-  paymentStatus: document.querySelector("#payment-status"),
+  amountBuilderStatus: document.querySelector("#amount-builder-status"),
   loginForm: document.querySelector("#login-form"),
   signupForm: document.querySelector("#signup-form"),
   groupSelect: document.querySelector("#group-select"),
+  createRoomPanel: document.querySelector("#create-room-panel"),
+  createRoomForm: document.querySelector("#create-room-form"),
+  createRoomToggle: document.querySelector("#create-room-toggle"),
+  createRoomCancel: document.querySelector("#create-room-cancel"),
+  createRoomName: document.querySelector("#create-room-name"),
+  createRoomKey: document.querySelector("#create-room-key"),
+  createRoomStatus: document.querySelector("#create-room-status"),
   joinRoomForm: document.querySelector("#join-room-form"),
   welcomeTitle: document.querySelector("#welcome-title"),
   activeRoomChip: document.querySelector("#active-room-chip"),
@@ -60,7 +68,11 @@ const elements = {
   tabPanels: document.querySelectorAll(".tab-panel"),
   memberDrawer: document.querySelector("#member-drawer"),
   memberDrawerToggle: document.querySelector("#member-drawer-toggle"),
-  settlementPayeeSelect: document.querySelector("#settlement-payee-select"),
+  expenseAmountInput: document.querySelector("#expense-amount"),
+  amountBuilderBody: document.querySelector("#amount-builder-body"),
+  amountBuilderTotal: document.querySelector("#amount-builder-total"),
+  amountBuilderClear: document.querySelector("#amount-builder-clear"),
+  amountBuilderConfirm: document.querySelector("#amount-builder-confirm"),
   cashSelectorRoot: document.querySelector("#cash-selector-root")
 };
 
@@ -76,12 +88,17 @@ function bindEvents() {
   elements.loginForm.addEventListener("submit", handleLogin);
   elements.signupForm.addEventListener("submit", handleSignup);
   elements.groupSelect.addEventListener("change", handleGroupChange);
+  elements.createRoomToggle.addEventListener("click", openCreateRoomPanel);
+  elements.createRoomForm.addEventListener("submit", handleCreateRoom);
+  elements.createRoomCancel.addEventListener("click", closeCreateRoomPanel);
   elements.joinRoomForm.addEventListener("submit", handleJoinRoom);
   elements.expenseForm.addEventListener("submit", handleCreateExpense);
   elements.splitMode.addEventListener("change", renderCustomShareInputs);
   elements.logoutButton.addEventListener("click", handleLogout);
   elements.memberDrawerToggle.addEventListener("click", toggleMemberDrawer);
   elements.cashSelectorRoot.addEventListener("cashValueSelected", handleCashValueSelected);
+  elements.amountBuilderClear.addEventListener("click", handleClearAmountBuilder);
+  elements.amountBuilderConfirm.addEventListener("click", handleConfirmAmountBuilder);
 
   elements.tabButtons.forEach((button) => {
     button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
@@ -161,7 +178,7 @@ async function handleLogin(event) {
 
 async function handleSignup(event) {
   event.preventDefault();
-  setStatus(elements.authStatus, "Creating your profile and room...");
+  setStatus(elements.authStatus, "Creating your account...");
 
   const formData = new FormData(event.currentTarget);
 
@@ -170,16 +187,14 @@ async function handleSignup(event) {
       displayName: String(formData.get("displayName")),
       email: String(formData.get("email")),
       password: String(formData.get("password")),
-      roomName: String(formData.get("roomName")),
       currency: String(formData.get("currency"))
     });
 
     state.currentMember = normalizeMember(member);
-    state.activeGroupId = member.default_group_id || null;
+    state.activeGroupId = null;
     await bootstrapWorkspace();
     event.currentTarget.reset();
-    activateTab("login-view");
-    setStatus(elements.authStatus, `Profile created. Room key: ${member.default_room_key || "Unavailable"}`);
+    setStatus(elements.authStatus, "");
   } catch (error) {
     setStatus(elements.authStatus, error.message || "Signup failed.");
   }
@@ -201,7 +216,7 @@ async function bootstrapWorkspace() {
     if (!state.availableGroups.length) {
       state.activeGroupId = null;
       renderGroups();
-      renderEmptyWorkspace("You are not part of any rooms yet. Ask for a room key or create one during signup.");
+      renderEmptyWorkspace("You are not part of any rooms yet. Create a room or join one with a room ID.");
       saveSession();
       return;
     }
@@ -220,8 +235,47 @@ async function bootstrapWorkspace() {
 
 async function handleGroupChange(event) {
   state.activeGroupId = event.target.value;
+  resetAmountBuilder(true);
+  closeCreateRoomPanel();
   await loadActiveGroupData();
   saveSession();
+}
+
+async function handleCreateRoom(event) {
+  event.preventDefault();
+  if (!state.currentMember) {
+    return;
+  }
+
+  const formData = new FormData(event.currentTarget);
+  const roomName = String(formData.get("roomName") || "").trim();
+  const roomKey = String(formData.get("roomKey") || "").trim().toUpperCase();
+
+  if (!roomName || !roomKey) {
+    setStatus(elements.createRoomStatus, "Enter a room name and room ID.");
+    return;
+  }
+
+  setStatus(elements.createRoomStatus, "Creating room...");
+
+  try {
+    const created = await createGroupForMember(state.currentMember.session_token, {
+      roomName,
+      roomKey,
+      currency: state.currentMember.preferred_currency
+    });
+
+    state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+    state.activeGroupId = created.group_id;
+    resetAmountBuilder(true);
+    renderGroups();
+    closeCreateRoomPanel();
+    await loadActiveGroupData();
+    saveSession();
+    setStatus(elements.expenseStatus, `Created ${created.group_name}. Room ID: ${created.room_key}.`);
+  } catch (error) {
+    setStatus(elements.createRoomStatus, error.message || "Could not create room.");
+  }
 }
 
 async function handleJoinRoom(event) {
@@ -242,12 +296,13 @@ async function handleJoinRoom(event) {
     const joined = await joinGroupByRoomKey(state.currentMember.session_token, roomKey);
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
     state.activeGroupId = joined.group_id;
+    resetAmountBuilder(true);
+    closeCreateRoomPanel();
     renderGroups();
     await loadActiveGroupData();
     event.currentTarget.reset();
     saveSession();
     setStatus(elements.expenseStatus, `Joined ${joined.group_name}.`);
-    setStatus(elements.paymentStatus, "Long-press a base amount, then aim the wheel for the final cash value.");
   } catch (error) {
     setStatus(elements.expenseStatus, error.message || "Could not join room.");
   }
@@ -284,10 +339,12 @@ async function loadActiveGroupData() {
 
 function renderGroups() {
   if (!state.availableGroups.length) {
-    elements.groupSelect.innerHTML = "";
+    elements.groupSelect.innerHTML = `<option value="">No rooms yet</option>`;
+    elements.groupSelect.disabled = true;
     return;
   }
 
+  elements.groupSelect.disabled = false;
   elements.groupSelect.innerHTML = state.availableGroups
     .map((group) => {
       const selected = group.id === state.activeGroupId ? "selected" : "";
@@ -303,7 +360,7 @@ function renderWorkspace() {
   renderBalancesTable();
   renderExpenseFormMembers();
   renderExpenseHistory();
-  renderSettlementPayees();
+  renderAmountBuilder();
 }
 
 function renderDrawer() {
@@ -346,8 +403,9 @@ function renderEmptyWorkspace(message) {
   elements.roomKeyDisplay.textContent = "--------";
   elements.drawerRoomName.textContent = message;
   elements.activeRoomChip.textContent = "No room selected";
-  elements.settlementPayeeSelect.innerHTML = `<option value="">No member to pay</option>`;
-  setStatus(elements.paymentStatus, "");
+  closeCreateRoomPanel({ preserveStatus: true });
+  resetAmountBuilder(true);
+  renderAmountBuilder(message);
 }
 
 function renderSummary() {
@@ -512,23 +570,53 @@ function renderExpenseHistory() {
   });
 }
 
-function renderSettlementPayees() {
-  const payees = state.balances.filter((row) => row.direction === "you_owe");
-  if (!payees.length) {
-    elements.settlementPayeeSelect.innerHTML = `<option value="">No outstanding payees</option>`;
-    setStatus(elements.paymentStatus, "You do not owe anyone in this room right now.");
+function renderAmountBuilder(emptyMessage) {
+  if (emptyMessage) {
+    elements.amountBuilderBody.innerHTML = `
+      <tr>
+        <td colspan="3"><div class="empty-state">${escapeHtml(emptyMessage)}</div></td>
+      </tr>
+    `;
+    elements.amountBuilderTotal.textContent = formatCurrency(0);
+    elements.amountBuilderClear.disabled = true;
+    elements.amountBuilderConfirm.disabled = true;
+    setStatus(elements.amountBuilderStatus, "");
     return;
   }
 
-  elements.settlementPayeeSelect.innerHTML = payees
-    .map((row) => `
-      <option value="${row.member_id}">
-        ${escapeHtml(row.counterparty_name)} (${formatCurrency(row.amount)})
-      </option>
-    `)
-    .join("");
+  if (!state.amountEntries.length) {
+    elements.amountBuilderBody.innerHTML = `
+      <tr>
+        <td colspan="3"><div class="empty-state">Tap a base amount to start building the total.</div></td>
+      </tr>
+    `;
+  } else {
+    elements.amountBuilderBody.innerHTML = state.amountEntries
+      .map((entry, index) => `
+        <tr>
+          <td>${escapeHtml(entry.label)}</td>
+          <td>${formatCurrency(entry.amount)}</td>
+          <td class="amount-builder__remove-cell">
+            <button class="amount-builder__remove" type="button" data-remove-amount-index="${index}">Remove</button>
+          </td>
+        </tr>
+      `)
+      .join("");
+  }
 
-  setStatus(elements.paymentStatus, "Long-press a base amount, then aim the wheel for the final cash value.");
+  elements.amountBuilderTotal.textContent = formatCurrency(getAmountBuilderTotal());
+  elements.amountBuilderClear.disabled = !state.amountEntries.length;
+  elements.amountBuilderConfirm.disabled = !state.amountEntries.length;
+
+  elements.amountBuilderBody.querySelectorAll("[data-remove-amount-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      removeAmountEntry(Number(button.dataset.removeAmountIndex));
+    });
+  });
+
+  if (!state.amountEntries.length) {
+    setStatus(elements.amountBuilderStatus, "Tap a base amount to add it instantly, or long-press for the 10-90 wheel.");
+  }
 }
 
 async function handleCreateExpense(event) {
@@ -574,6 +662,7 @@ async function handleCreateExpense(event) {
     await createExpense(state.currentMember.session_token, payload);
     event.currentTarget.reset();
     setDefaultDate();
+    resetAmountBuilder(false);
     renderExpenseFormMembers();
     await loadActiveGroupData();
     setStatus(elements.expenseStatus, "Expense saved.");
@@ -593,34 +682,22 @@ async function handleDeleteExpense(expenseId) {
   }
 }
 
-async function handleCashValueSelected(event) {
+function handleCashValueSelected(event) {
   if (!state.currentMember || !state.activeGroupId) {
-    setStatus(elements.paymentStatus, "Open a room before recording a payment.");
+    setStatus(elements.amountBuilderStatus, "Open a room before building an expense amount.");
     return;
   }
 
-  const payeeId = elements.settlementPayeeSelect.value;
-  if (!payeeId) {
-    setStatus(elements.paymentStatus, "Choose who you paid before selecting an amount.");
-    return;
-  }
-
-  const payload = {
-    group_id: state.activeGroupId,
-    to_member_id: payeeId,
+  state.amountEntries.push({
+    label: event.detail.label,
     amount: event.detail.amount,
-    paid_at: event.detail.timestamp,
-    note: `Cash selector settlement from ${event.detail.sourceButton}`
-  };
+    baseValue: event.detail.baseValue,
+    radialValue: event.detail.radialValue,
+    timestamp: event.detail.timestamp
+  });
 
-  try {
-    setStatus(elements.paymentStatus, "Recording settlement...");
-    await createSettlement(state.currentMember.session_token, payload);
-    await loadActiveGroupData();
-    setStatus(elements.expenseStatus, "Settlement saved.");
-  } catch (error) {
-    setStatus(elements.paymentStatus, error.message || "Could not save settlement.");
-  }
+  renderAmountBuilder();
+  setStatus(elements.amountBuilderStatus, `${event.detail.label} added to the running total.`);
 }
 
 function handleLogout() {
@@ -633,12 +710,72 @@ function handleLogout() {
   state.balances = [];
   state.debtRows = [];
   state.summary = null;
+  state.amountEntries = [];
   clearSession();
+  closeCreateRoomPanel({ preserveStatus: false });
   elements.memberDrawer.classList.remove("is-open");
   elements.memberDrawerToggle.setAttribute("aria-expanded", "false");
   elements.authPanel.hidden = false;
   elements.workspacePanel.hidden = true;
+  renderAmountBuilder("Log in and open a room to build an amount.");
   setStatus(elements.authStatus, "Logged out.");
+  setStatus(elements.amountBuilderStatus, "");
+}
+
+function openCreateRoomPanel() {
+  elements.createRoomPanel.hidden = false;
+  elements.createRoomName.value = "";
+  elements.createRoomKey.value = generateRoomKeyCandidate();
+  setStatus(elements.createRoomStatus, "");
+  window.setTimeout(() => {
+    elements.createRoomName.focus();
+  }, 0);
+}
+
+function closeCreateRoomPanel(options = {}) {
+  const { preserveStatus = false } = options;
+  elements.createRoomPanel.hidden = true;
+  elements.createRoomForm.reset();
+  if (!preserveStatus) {
+    setStatus(elements.createRoomStatus, "");
+  }
+}
+
+function handleClearAmountBuilder() {
+  resetAmountBuilder(true);
+  renderAmountBuilder();
+  setStatus(elements.amountBuilderStatus, "Running amount cleared.");
+}
+
+function handleConfirmAmountBuilder() {
+  if (!state.amountEntries.length) {
+    setStatus(elements.amountBuilderStatus, "Add at least one amount before confirming.");
+    return;
+  }
+
+  elements.expenseAmountInput.value = getAmountBuilderTotal().toFixed(2);
+  setStatus(elements.amountBuilderStatus, `Expense amount set to ${formatCurrency(getAmountBuilderTotal())}.`);
+}
+
+function removeAmountEntry(index) {
+  if (Number.isNaN(index) || index < 0 || index >= state.amountEntries.length) {
+    return;
+  }
+
+  state.amountEntries.splice(index, 1);
+  renderAmountBuilder();
+  setStatus(elements.amountBuilderStatus, "Amount entry removed.");
+}
+
+function resetAmountBuilder(clearField) {
+  state.amountEntries = [];
+  if (clearField) {
+    elements.expenseAmountInput.value = "";
+  }
+}
+
+function getAmountBuilderTotal() {
+  return roundCurrency(state.amountEntries.reduce((total, entry) => total + entry.amount, 0));
 }
 
 function toggleMemberDrawer() {
@@ -856,6 +993,17 @@ function roundCurrency(value) {
 
 function isTapDrawerMode() {
   return window.matchMedia("(max-width: 980px), (hover: none)").matches;
+}
+
+function generateRoomKeyCandidate() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let candidate = "";
+
+  for (let index = 0; index < 8; index += 1) {
+    candidate += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+
+  return candidate;
 }
 
 function escapeHtml(value) {

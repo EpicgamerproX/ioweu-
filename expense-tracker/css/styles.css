@@ -89,7 +89,6 @@ select {
 .hero h1,
 .panel h2,
 .section-heading h3,
-.payment-sheet h3,
 .drawer-card h3 {
   font-family: "Space Grotesk", sans-serif;
   margin: 0;
@@ -151,8 +150,6 @@ select {
 .group-strip,
 .section-heading,
 .inline-form,
-.payment-sheet__header,
-.payment-sheet__controls,
 .workspace-meta {
   display: flex;
   justify-content: space-between;
@@ -169,8 +166,7 @@ select {
 }
 
 .tabs__button,
-.button,
-.payment-launcher__button {
+.button {
   border: 0;
   border-radius: 999px;
   cursor: pointer;
@@ -224,8 +220,7 @@ select {
 }
 
 .button:hover,
-.tabs__button:hover,
-.payment-launcher__button:hover {
+.tabs__button:hover {
   transform: translateY(-1px);
 }
 
@@ -253,6 +248,26 @@ select {
 .group-strip {
   margin: 22px 0 28px;
   flex-wrap: wrap;
+}
+
+.room-actions,
+.room-creator__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.room-actions {
+  margin-left: auto;
+}
+
+.room-creator {
+  margin-bottom: 20px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: rgba(255, 252, 247, 0.78);
 }
 
 .workspace-chip {
@@ -341,7 +356,7 @@ tbody tr:last-child td {
   padding: 18px;
 }
 
-.settlement-panel {
+.amount-builder {
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid rgba(64, 39, 19, 0.12);
@@ -349,9 +364,40 @@ tbody tr:last-child td {
   gap: 16px;
 }
 
-.settlement-panel__controls {
-  display: grid;
+.amount-builder__ledger .table-shell {
+  background: rgba(255, 252, 247, 0.88);
+}
+
+.amount-builder__ledger th,
+.amount-builder__ledger td {
+  padding: 12px 14px;
+}
+
+.amount-builder__ledger tfoot th {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+}
+
+.amount-builder__remove-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.amount-builder__remove {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(151, 61, 42, 0.12);
+  color: var(--red);
+  cursor: pointer;
+}
+
+.amount-builder__actions {
+  display: flex;
   gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .grid-2 {
@@ -540,16 +586,6 @@ tbody tr:last-child td {
 
 .drawer-logout {
   width: 100%;
-}
-
-.settlement-panel .field span {
-  color: rgba(255, 247, 236, 0.66);
-}
-
-.settlement-panel select {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #fff8ef;
 }
 
 .cash-selector-root {
@@ -832,10 +868,11 @@ tbody tr:last-child td {
   .section-heading,
   .group-strip,
   .inline-form,
+  .room-actions,
+  .room-creator__actions,
   .history-item__top,
   .history-item__meta,
-  .history-item__settlement,
-  .settlement-panel__controls {
+  .history-item__settlement {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -844,7 +881,9 @@ tbody tr:last-child td {
   .inline-form,
   .inline-form input,
   .inline-form button,
-  .settlement-panel__controls .field {
+  .room-actions,
+  .room-actions .button,
+  .room-creator__actions .button {
     width: 100%;
   }
 
@@ -864,6 +903,14 @@ tbody tr:last-child td {
 
   .member-drawer__toggle {
     padding: 16px 18px;
+  }
+
+  .amount-builder__actions {
+    flex-direction: column;
+  }
+
+  .amount-builder__actions .button {
+    width: 100%;
   }
 
   .cash-selector__grid {
