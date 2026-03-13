@@ -971,7 +971,7 @@ function getActiveGroup() {
 }
 
 function getGroupRoomKey(group) {
-  return group?.room_key || "--------";
+  return group?.room_key || group?.id || "--------";
 }
 
 function formatDirection(direction) {
