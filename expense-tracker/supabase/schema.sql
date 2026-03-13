@@ -3,11 +3,21 @@ create extension if not exists pgcrypto;
 create table if not exists public.members (
   id uuid primary key default gen_random_uuid(),
   display_name text not null unique,
-  passcode_hash text not null,
+  email text not null,
+  password_hash text not null,
   preferred_currency text not null default 'INR',
   is_active boolean not null default true,
   created_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.members add column if not exists email text;
+alter table public.members add column if not exists password_hash text;
+alter table public.members add column if not exists preferred_currency text not null default 'INR';
+alter table public.members add column if not exists is_active boolean not null default true;
+alter table public.members add column if not exists created_at timestamptz not null default timezone('utc', now());
+
+create unique index if not exists members_email_lower_idx
+  on public.members (lower(email));
 
 create table if not exists public.member_sessions (
   token uuid primary key default gen_random_uuid(),
@@ -19,10 +29,18 @@ create table if not exists public.member_sessions (
 create table if not exists public.groups (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  room_key text not null,
   currency_code text not null default 'INR',
   created_by_member_id uuid not null references public.members(id),
   created_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.groups add column if not exists room_key text;
+alter table public.groups add column if not exists currency_code text not null default 'INR';
+alter table public.groups add column if not exists created_at timestamptz not null default timezone('utc', now());
+
+create unique index if not exists groups_room_key_idx
+  on public.groups (room_key);
 
 create table if not exists public.group_members (
   group_id uuid not null references public.groups(id) on delete cascade,
@@ -53,12 +71,25 @@ create table if not exists public.expense_shares (
   unique (expense_id, member_id)
 );
 
+create table if not exists public.settlement_payments (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.groups(id) on delete cascade,
+  from_member_id uuid not null references public.members(id),
+  to_member_id uuid not null references public.members(id),
+  amount numeric(12, 2) not null check (amount > 0),
+  paid_at timestamptz not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  created_by_member_id uuid not null references public.members(id),
+  note text
+);
+
 alter table public.members enable row level security;
 alter table public.member_sessions enable row level security;
 alter table public.groups enable row level security;
 alter table public.group_members enable row level security;
 alter table public.expenses enable row level security;
 alter table public.expense_shares enable row level security;
+alter table public.settlement_payments enable row level security;
 
 drop policy if exists no_direct_access_members on public.members;
 create policy no_direct_access_members on public.members for all using (false) with check (false);
@@ -77,6 +108,73 @@ create policy no_direct_access_expenses on public.expenses for all using (false)
 
 drop policy if exists no_direct_access_expense_shares on public.expense_shares;
 create policy no_direct_access_expense_shares on public.expense_shares for all using (false) with check (false);
+
+drop policy if exists no_direct_access_settlement_payments on public.settlement_payments;
+create policy no_direct_access_settlement_payments on public.settlement_payments for all using (false) with check (false);
+
+create or replace function public.normalize_email(input_email text)
+returns text
+language sql
+immutable
+as $$
+  select lower(trim(input_email));
+$$;
+
+create or replace function public.generate_room_key()
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  candidate text;
+begin
+  loop
+    candidate := upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8));
+    exit when not exists (
+      select 1
+      from public.groups
+      where room_key = candidate
+    );
+  end loop;
+
+  return candidate;
+end;
+$$;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'members'
+      and column_name = 'passcode_hash'
+  ) then
+    execute '
+      update public.members
+      set password_hash = coalesce(password_hash, passcode_hash)
+      where password_hash is null
+    ';
+  end if;
+end;
+$$;
+
+update public.members
+set email = coalesce(
+  email,
+  lower(regexp_replace(display_name, '\s+', '.', 'g')) || '+' || substr(id::text, 1, 8) || '@legacy.local'
+)
+where email is null;
+
+alter table public.members alter column email set not null;
+alter table public.members alter column password_hash set not null;
+
+update public.groups
+set room_key = public.generate_room_key()
+where room_key is null or btrim(room_key) = '';
+
+alter table public.groups alter column room_key set not null;
 
 create or replace function public.create_session(member_id_input uuid)
 returns uuid
@@ -122,7 +220,26 @@ begin
 end;
 $$;
 
-create or replace function public.login_member(member_name text, member_passcode text)
+create or replace function public.require_group_membership(group_id_input uuid, member_id_input uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.group_members
+    where group_id = group_id_input
+      and member_id = member_id_input
+      and is_active = true
+  ) then
+    raise exception 'You do not belong to this group';
+  end if;
+end;
+$$;
+
+create or replace function public.login_member(member_email text, member_password text)
 returns jsonb
 language plpgsql
 security definer
@@ -131,18 +248,19 @@ as $$
 declare
   matched_member public.members%rowtype;
   session_token uuid;
+  normalized_email text := public.normalize_email(member_email);
 begin
   select *
   into matched_member
   from public.members
-  where lower(display_name) = lower(trim(member_name))
+  where lower(email) = normalized_email
     and is_active = true;
 
   if matched_member.id is null then
     return null;
   end if;
 
-  if matched_member.passcode_hash <> extensions.crypt(member_passcode, matched_member.passcode_hash) then
+  if matched_member.password_hash <> extensions.crypt(member_password, matched_member.password_hash) then
     return null;
   end if;
 
@@ -151,6 +269,7 @@ begin
   return jsonb_build_object(
     'member_id', matched_member.id,
     'display_name', matched_member.display_name,
+    'email', matched_member.email,
     'preferred_currency', matched_member.preferred_currency,
     'session_token', session_token
   );
@@ -158,8 +277,9 @@ end;
 $$;
 
 create or replace function public.signup_member_with_group(
-  member_name text,
-  member_passcode text,
+  member_display_name text,
+  member_email text,
+  member_password text,
   initial_group_name text,
   preferred_currency text
 )
@@ -171,19 +291,32 @@ as $$
 declare
   new_member_id uuid;
   new_group_id uuid;
+  new_room_key text;
   session_token uuid;
   normalized_currency text := upper(coalesce(nullif(trim(preferred_currency), ''), 'INR'));
+  normalized_email text := public.normalize_email(member_email);
 begin
-  insert into public.members (display_name, passcode_hash, preferred_currency)
+  if exists (
+    select 1
+    from public.members
+    where lower(email) = normalized_email
+  ) then
+    raise exception 'An account with this email already exists';
+  end if;
+
+  insert into public.members (display_name, email, password_hash, preferred_currency)
   values (
-    trim(member_name),
-    extensions.crypt(member_passcode, extensions.gen_salt('bf')),
+    trim(member_display_name),
+    normalized_email,
+    extensions.crypt(member_password, extensions.gen_salt('bf')),
     normalized_currency
   )
   returning id into new_member_id;
 
-  insert into public.groups (name, currency_code, created_by_member_id)
-  values (trim(initial_group_name), normalized_currency, new_member_id)
+  new_room_key := public.generate_room_key();
+
+  insert into public.groups (name, room_key, currency_code, created_by_member_id)
+  values (trim(initial_group_name), new_room_key, normalized_currency, new_member_id)
   returning id into new_group_id;
 
   insert into public.group_members (group_id, member_id)
@@ -193,9 +326,11 @@ begin
 
   return jsonb_build_object(
     'member_id', new_member_id,
-    'display_name', trim(member_name),
+    'display_name', trim(member_display_name),
+    'email', normalized_email,
     'preferred_currency', normalized_currency,
     'default_group_id', new_group_id,
+    'default_room_key', new_room_key,
     'session_token', session_token
   );
 end;
@@ -217,6 +352,7 @@ begin
       jsonb_build_object(
         'group_id', g.id,
         'group_name', g.name,
+        'room_key', g.room_key,
         'currency_code', g.currency_code
       )
       order by gm.joined_at asc
@@ -229,10 +365,9 @@ begin
 end;
 $$;
 
-create or replace function public.create_group_for_member(
+create or replace function public.join_group_by_room_key(
   session_token_input uuid,
-  new_group_name text,
-  preferred_currency text
+  room_key_input text
 )
 returns jsonb
 language plpgsql
@@ -241,22 +376,31 @@ set search_path = public
 as $$
 declare
   current_member_id uuid;
-  new_group_id uuid;
-  normalized_currency text := upper(coalesce(nullif(trim(preferred_currency), ''), 'INR'));
+  target_group public.groups%rowtype;
 begin
   current_member_id := public.require_valid_session(session_token_input);
 
-  insert into public.groups (name, currency_code, created_by_member_id)
-  values (trim(new_group_name), normalized_currency, current_member_id)
-  returning id into new_group_id;
+  select *
+  into target_group
+  from public.groups
+  where room_key = upper(trim(room_key_input));
 
-  insert into public.group_members (group_id, member_id)
-  values (new_group_id, current_member_id);
+  if target_group.id is null then
+    raise exception 'Room key not found';
+  end if;
+
+  insert into public.group_members (group_id, member_id, is_active)
+  values (target_group.id, current_member_id, true)
+  on conflict (group_id, member_id)
+  do update set
+    is_active = true,
+    joined_at = timezone('utc', now());
 
   return jsonb_build_object(
-    'group_id', new_group_id,
-    'group_name', trim(new_group_name),
-    'currency_code', normalized_currency
+    'group_id', target_group.id,
+    'group_name', target_group.name,
+    'room_key', target_group.room_key,
+    'currency_code', target_group.currency_code
   );
 end;
 $$;
@@ -269,28 +413,16 @@ set search_path = public
 as $$
 declare
   current_member_id uuid;
-  is_member boolean;
 begin
   current_member_id := public.require_valid_session(session_token_input);
-
-  select exists(
-    select 1
-    from public.group_members
-    where group_id = group_id_input
-      and member_id = current_member_id
-      and is_active = true
-  )
-  into is_member;
-
-  if not is_member then
-    raise exception 'You do not belong to this group';
-  end if;
+  perform public.require_group_membership(group_id_input, current_member_id);
 
   return coalesce((
     select jsonb_agg(
       jsonb_build_object(
         'member_id', m.id,
         'display_name', m.display_name,
+        'email', m.email,
         'preferred_currency', m.preferred_currency
       )
       order by gm.joined_at asc
@@ -311,22 +443,9 @@ set search_path = public
 as $$
 declare
   current_member_id uuid;
-  is_member boolean;
 begin
   current_member_id := public.require_valid_session(session_token_input);
-
-  select exists(
-    select 1
-    from public.group_members
-    where group_id = group_id_input
-      and member_id = current_member_id
-      and is_active = true
-  )
-  into is_member;
-
-  if not is_member then
-    raise exception 'You do not belong to this group';
-  end if;
+  perform public.require_group_membership(group_id_input, current_member_id);
 
   return coalesce((
     select jsonb_agg(
@@ -362,6 +481,88 @@ begin
 end;
 $$;
 
+create or replace function public.get_group_settlements(session_token_input uuid, group_id_input uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_member_id uuid;
+begin
+  current_member_id := public.require_valid_session(session_token_input);
+  perform public.require_group_membership(group_id_input, current_member_id);
+
+  return coalesce((
+    select jsonb_agg(
+      jsonb_build_object(
+        'id', sp.id,
+        'group_id', sp.group_id,
+        'from_member_id', sp.from_member_id,
+        'to_member_id', sp.to_member_id,
+        'amount', sp.amount,
+        'paid_at', sp.paid_at,
+        'created_at', sp.created_at,
+        'created_by_member_id', sp.created_by_member_id,
+        'note', sp.note,
+        'from_member_name', debtor.display_name,
+        'to_member_name', creditor.display_name
+      )
+      order by sp.paid_at desc, sp.created_at desc
+    )
+    from public.settlement_payments sp
+    join public.members debtor on debtor.id = sp.from_member_id
+    join public.members creditor on creditor.id = sp.to_member_id
+    where sp.group_id = group_id_input
+  ), '[]'::jsonb);
+end;
+$$;
+
+create or replace function public.record_group_settlement(session_token_input uuid, settlement_payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_member_id uuid;
+  target_group_id uuid := (settlement_payload ->> 'group_id')::uuid;
+  to_member uuid := (settlement_payload ->> 'to_member_id')::uuid;
+  amount_value numeric(12, 2) := round((settlement_payload ->> 'amount')::numeric, 2);
+  settlement_id uuid;
+begin
+  current_member_id := public.require_valid_session(session_token_input);
+  perform public.require_group_membership(target_group_id, current_member_id);
+  perform public.require_group_membership(target_group_id, to_member);
+
+  if current_member_id = to_member then
+    raise exception 'You cannot pay yourself';
+  end if;
+
+  insert into public.settlement_payments (
+    group_id,
+    from_member_id,
+    to_member_id,
+    amount,
+    paid_at,
+    created_by_member_id,
+    note
+  )
+  values (
+    target_group_id,
+    current_member_id,
+    to_member,
+    amount_value,
+    coalesce((settlement_payload ->> 'paid_at')::timestamptz, timezone('utc', now())),
+    current_member_id,
+    nullif(trim(coalesce(settlement_payload ->> 'note', '')), '')
+  )
+  returning id into settlement_id;
+
+  return jsonb_build_object('settlement_id', settlement_id);
+end;
+$$;
+
 create or replace function public.create_group_expense(session_token_input uuid, expense_payload jsonb)
 returns jsonb
 language plpgsql
@@ -383,36 +584,11 @@ declare
   running_total numeric(12, 2) := 0;
   participant_index integer := 0;
   custom_total numeric(12, 2) := 0;
-  is_member boolean;
   participant_member_id uuid;
 begin
   current_member_id := public.require_valid_session(session_token_input);
-
-  select exists(
-    select 1
-    from public.group_members
-    where group_id = target_group_id
-      and member_id = current_member_id
-      and is_active = true
-  )
-  into is_member;
-
-  if not is_member then
-    raise exception 'You do not belong to this group';
-  end if;
-
-  select exists(
-    select 1
-    from public.group_members
-    where group_id = target_group_id
-      and member_id = paid_by_member
-      and is_active = true
-  )
-  into is_member;
-
-  if not is_member then
-    raise exception 'Payer must belong to the active group';
-  end if;
+  perform public.require_group_membership(target_group_id, current_member_id);
+  perform public.require_group_membership(target_group_id, paid_by_member);
 
   insert into public.expenses (
     group_id,
@@ -440,19 +616,7 @@ begin
       from jsonb_array_elements(coalesce(expense_payload -> 'custom_shares', '[]'::jsonb))
     loop
       participant_member_id := (custom_share ->> 'member_id')::uuid;
-
-      select exists(
-        select 1
-        from public.group_members
-        where group_id = target_group_id
-          and member_id = participant_member_id
-          and is_active = true
-      )
-      into is_member;
-
-      if not is_member then
-        raise exception 'Each participant must belong to the active group';
-      end if;
+      perform public.require_group_membership(target_group_id, participant_member_id);
 
       custom_total := custom_total + round((custom_share ->> 'owed_amount')::numeric, 2);
 
@@ -481,18 +645,7 @@ begin
       participant_member_id := participant_id_text::uuid;
       participant_index := participant_index + 1;
 
-      select exists(
-        select 1
-        from public.group_members
-        where group_id = target_group_id
-          and member_id = participant_member_id
-          and is_active = true
-      )
-      into is_member;
-
-      if not is_member then
-        raise exception 'Each participant must belong to the active group';
-      end if;
+      perform public.require_group_membership(target_group_id, participant_member_id);
 
       adjusted_share := case
         when participant_index = participant_count then round(total_amount - running_total, 2)

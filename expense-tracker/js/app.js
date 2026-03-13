@@ -1,40 +1,53 @@
 import { APP_CONFIG } from "./config.js";
 import {
   createExpense,
-  createGroupForMember,
+  createSettlement,
   deleteExpense,
   fetchExpenses,
   fetchGroupMembers,
   fetchGroupsForMember,
+  fetchSettlements,
+  joinGroupByRoomKey,
   loginMember,
   signUpMember
 } from "./supabase-client.js";
+import { CashSelector } from "./cash-selector.js";
 
 const state = {
   currentMember: null,
   availableGroups: [],
   activeGroupId: null,
   groupMembers: [],
-  balances: [],
   expenses: [],
+  settlements: [],
+  balances: [],
+  debtRows: [],
   summary: null
 };
 
 const elements = {
+  body: document.body,
   authPanel: document.querySelector("#auth-panel"),
   workspacePanel: document.querySelector("#workspace-panel"),
   authStatus: document.querySelector("#auth-status"),
   expenseStatus: document.querySelector("#expense-status"),
+  paymentStatus: document.querySelector("#payment-status"),
   loginForm: document.querySelector("#login-form"),
   signupForm: document.querySelector("#signup-form"),
   groupSelect: document.querySelector("#group-select"),
-  joinGroupForm: document.querySelector("#join-group-form"),
+  joinRoomForm: document.querySelector("#join-room-form"),
   welcomeTitle: document.querySelector("#welcome-title"),
+  activeRoomChip: document.querySelector("#active-room-chip"),
   owedToYou: document.querySelector("#owed-to-you"),
   youOwe: document.querySelector("#you-owe"),
   netBalance: document.querySelector("#net-balance"),
   totalSpent: document.querySelector("#total-spent"),
-  equivalentGrid: document.querySelector("#equivalent-grid"),
+  drawerName: document.querySelector("#member-drawer-name"),
+  drawerTitle: document.querySelector("#drawer-title"),
+  drawerRoomName: document.querySelector("#drawer-room-name"),
+  drawerEquivalentGrid: document.querySelector("#drawer-equivalent-grid"),
+  roomKeyDisplay: document.querySelector("#room-key-display"),
+  debtTableBody: document.querySelector("#debt-table-body"),
   balancesTableBody: document.querySelector("#balances-table-body"),
   paidBySelect: document.querySelector("#paid-by-select"),
   participantsList: document.querySelector("#participants-list"),
@@ -45,8 +58,17 @@ const elements = {
   splitMode: document.querySelector("#split-mode"),
   logoutButton: document.querySelector("#logout-button"),
   tabButtons: document.querySelectorAll(".tabs__button"),
-  tabPanels: document.querySelectorAll(".tab-panel")
+  tabPanels: document.querySelectorAll(".tab-panel"),
+  memberDrawer: document.querySelector("#member-drawer"),
+  memberDrawerToggle: document.querySelector("#member-drawer-toggle"),
+  paidButton: document.querySelector("#paid-button"),
+  paymentSheet: document.querySelector("#payment-sheet"),
+  paymentSheetClose: document.querySelector("#payment-sheet-close"),
+  settlementPayeeSelect: document.querySelector("#settlement-payee-select"),
+  cashSelectorRoot: document.querySelector("#cash-selector-root")
 };
+
+new CashSelector(elements.cashSelectorRoot);
 
 function init() {
   bindEvents();
@@ -58,10 +80,20 @@ function bindEvents() {
   elements.loginForm.addEventListener("submit", handleLogin);
   elements.signupForm.addEventListener("submit", handleSignup);
   elements.groupSelect.addEventListener("change", handleGroupChange);
-  elements.joinGroupForm.addEventListener("submit", handleCreateGroup);
+  elements.joinRoomForm.addEventListener("submit", handleJoinRoom);
   elements.expenseForm.addEventListener("submit", handleCreateExpense);
   elements.splitMode.addEventListener("change", renderCustomShareInputs);
   elements.logoutButton.addEventListener("click", handleLogout);
+  elements.memberDrawerToggle.addEventListener("click", toggleMemberDrawer);
+  elements.paidButton.addEventListener("click", openPaymentSheet);
+  elements.paymentSheetClose.addEventListener("click", closePaymentSheet);
+  elements.paymentSheet.addEventListener("click", (event) => {
+    if (event.target instanceof HTMLElement && event.target.dataset.closePaymentSheet === "true") {
+      closePaymentSheet();
+    }
+  });
+  elements.cashSelectorRoot.addEventListener("cashValueSelected", handleCashValueSelected);
+
   elements.tabButtons.forEach((button) => {
     button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
   });
@@ -90,12 +122,10 @@ function saveSession() {
     return;
   }
 
-  const payload = {
+  localStorage.setItem(APP_CONFIG.sessionStorageKey, JSON.stringify({
     currentMember: state.currentMember,
     activeGroupId: state.activeGroupId
-  };
-
-  localStorage.setItem(APP_CONFIG.sessionStorageKey, JSON.stringify(payload));
+  }));
 }
 
 function restoreSession() {
@@ -130,7 +160,7 @@ async function handleLogin(event) {
   const formData = new FormData(event.currentTarget);
 
   try {
-    const member = await loginMember(formData.get("name"), formData.get("passcode"));
+    const member = await loginMember(String(formData.get("email")), String(formData.get("password")));
     state.currentMember = normalizeMember(member);
     await bootstrapWorkspace();
     event.currentTarget.reset();
@@ -142,23 +172,25 @@ async function handleLogin(event) {
 
 async function handleSignup(event) {
   event.preventDefault();
-  setStatus(elements.authStatus, "Creating your profile...");
+  setStatus(elements.authStatus, "Creating your profile and room...");
 
   const formData = new FormData(event.currentTarget);
 
   try {
     const member = await signUpMember({
-      name: formData.get("name"),
-      passcode: formData.get("passcode"),
-      groupName: formData.get("groupName"),
-      currency: formData.get("currency")
+      displayName: String(formData.get("displayName")),
+      email: String(formData.get("email")),
+      password: String(formData.get("password")),
+      roomName: String(formData.get("roomName")),
+      currency: String(formData.get("currency"))
     });
+
     state.currentMember = normalizeMember(member);
     state.activeGroupId = member.default_group_id || null;
     await bootstrapWorkspace();
     event.currentTarget.reset();
     activateTab("login-view");
-    setStatus(elements.authStatus, "Profile created. You are now logged in.");
+    setStatus(elements.authStatus, `Profile created. Room key: ${member.default_room_key || "Unavailable"}`);
   } catch (error) {
     setStatus(elements.authStatus, error.message || "Signup failed.");
   }
@@ -172,22 +204,23 @@ async function bootstrapWorkspace() {
   elements.authPanel.hidden = true;
   elements.workspacePanel.hidden = false;
   elements.welcomeTitle.textContent = `${state.currentMember.display_name}'s dashboard`;
+  elements.drawerName.textContent = state.currentMember.display_name;
+  elements.drawerTitle.textContent = `${state.currentMember.display_name}'s spend story`;
 
   try {
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
     if (!state.availableGroups.length) {
       state.activeGroupId = null;
       renderGroups();
-      renderEmptyWorkspace("You are not part of any groups yet. Create one to get started.");
+      renderEmptyWorkspace("You are not part of any rooms yet. Ask for a room key or create one during signup.");
       saveSession();
       return;
     }
 
-    const selected = state.availableGroups.some((group) => group.id === state.activeGroupId)
+    state.activeGroupId = state.availableGroups.some((group) => group.id === state.activeGroupId)
       ? state.activeGroupId
       : state.availableGroups[0].id;
 
-    state.activeGroupId = selected;
     renderGroups();
     await loadActiveGroupData();
     saveSession();
@@ -202,79 +235,112 @@ async function handleGroupChange(event) {
   saveSession();
 }
 
-async function handleCreateGroup(event) {
+async function handleJoinRoom(event) {
   event.preventDefault();
   if (!state.currentMember) {
     return;
   }
 
-  const nameInput = document.querySelector("#join-group-name");
-  const groupName = nameInput.value.trim();
-  if (!groupName) {
+  const formData = new FormData(event.currentTarget);
+  const roomKey = String(formData.get("roomKey") || "").trim().toUpperCase();
+  if (!roomKey) {
     return;
   }
 
-  setStatus(elements.authStatus, "");
-  setStatus(elements.expenseStatus, "Creating group...");
+  setStatus(elements.expenseStatus, "Joining room...");
 
   try {
-    await createGroupForMember({
-      sessionToken: state.currentMember.session_token,
-      groupName,
-      currencyCode: state.currentMember.preferred_currency || APP_CONFIG.defaultCurrency
-    });
-    nameInput.value = "";
+    const joined = await joinGroupByRoomKey(state.currentMember.session_token, roomKey);
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
-    state.activeGroupId = state.availableGroups[state.availableGroups.length - 1]?.id || null;
+    state.activeGroupId = joined.group_id;
     renderGroups();
     await loadActiveGroupData();
+    event.currentTarget.reset();
     saveSession();
-    setStatus(elements.expenseStatus, "Group created.");
+    setStatus(elements.expenseStatus, `Joined ${joined.group_name}.`);
   } catch (error) {
-    setStatus(elements.expenseStatus, error.message || "Could not create group.");
+    setStatus(elements.expenseStatus, error.message || "Could not join room.");
   }
 }
 
 async function loadActiveGroupData() {
   if (!state.activeGroupId) {
-    renderEmptyWorkspace("Select a group to continue.");
+    renderEmptyWorkspace("Select a room to continue.");
     return;
   }
 
-  setStatus(elements.expenseStatus, "Loading balances and expenses...");
+  setStatus(elements.expenseStatus, "Loading room balances, expenses, and payments...");
 
   try {
-    const [members, expenses] = await Promise.all([
+    const [members, expenses, settlements] = await Promise.all([
       fetchGroupMembers(state.currentMember.session_token, state.activeGroupId),
-      fetchExpenses(state.currentMember.session_token, state.activeGroupId)
+      fetchExpenses(state.currentMember.session_token, state.activeGroupId),
+      fetchSettlements(state.currentMember.session_token, state.activeGroupId)
     ]);
 
     state.groupMembers = members;
     state.expenses = expenses;
-    state.balances = computeBalances(expenses, members, state.currentMember.id);
+    state.settlements = settlements;
+    state.balances = computeBalances(expenses, settlements, members, state.currentMember.id);
+    state.debtRows = computeOutstandingDebtRows(expenses, settlements, state.currentMember.id);
     state.summary = computeSummary(expenses, state.balances, state.currentMember.id);
+
     renderWorkspace();
     setStatus(elements.expenseStatus, "");
+    setStatus(elements.paymentStatus, "");
   } catch (error) {
-    renderEmptyWorkspace(error.message || "Unable to load group data.");
+    renderEmptyWorkspace(error.message || "Unable to load room data.");
   }
 }
 
 function renderGroups() {
-  const options = state.availableGroups.map((group) => {
-    const selected = group.id === state.activeGroupId ? "selected" : "";
-    return `<option value="${group.id}" ${selected}>${escapeHtml(group.name)}</option>`;
-  });
+  if (!state.availableGroups.length) {
+    elements.groupSelect.innerHTML = "";
+    return;
+  }
 
-  elements.groupSelect.innerHTML = options.join("");
+  elements.groupSelect.innerHTML = state.availableGroups
+    .map((group) => {
+      const selected = group.id === state.activeGroupId ? "selected" : "";
+      return `<option value="${group.id}" ${selected}>${escapeHtml(group.name)} (${escapeHtml(group.room_key)})</option>`;
+    })
+    .join("");
 }
 
 function renderWorkspace() {
   renderSummary();
-  renderFunEquivalents();
+  renderDrawer();
+  renderDebtTable();
   renderBalancesTable();
   renderExpenseFormMembers();
   renderExpenseHistory();
+  renderSettlementPayees();
+}
+
+function renderDrawer() {
+  const activeGroup = getActiveGroup();
+  elements.drawerRoomName.textContent = activeGroup
+    ? `${activeGroup.name} room`
+    : "No room selected";
+  elements.roomKeyDisplay.textContent = activeGroup?.room_key || "--------";
+  elements.activeRoomChip.textContent = activeGroup
+    ? `${activeGroup.name} | ${activeGroup.room_key}`
+    : "No room selected";
+
+  const funEquivalents = state.summary?.fun_equivalents || [];
+  if (!funEquivalents.length) {
+    elements.drawerEquivalentGrid.innerHTML = `<div class="empty-state">Add expenses you paid to unlock your dashboard cards.</div>`;
+    return;
+  }
+
+  elements.drawerEquivalentGrid.innerHTML = funEquivalents
+    .map((item) => `
+      <article class="equivalent-card">
+        <p class="equivalent-card__label">${escapeHtml(item.label)}</p>
+        <strong>${escapeHtml(item.quantity)}</strong>
+      </article>
+    `)
+    .join("");
 }
 
 function renderEmptyWorkspace(message) {
@@ -282,11 +348,16 @@ function renderEmptyWorkspace(message) {
   elements.youOwe.textContent = formatCurrency(0);
   elements.netBalance.textContent = formatCurrency(0);
   elements.totalSpent.textContent = formatCurrency(0);
-  elements.equivalentGrid.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+  elements.debtTableBody.innerHTML = `<tr><td colspan="4"><div class="empty-state">${escapeHtml(message)}</div></td></tr>`;
   elements.balancesTableBody.innerHTML = `<tr><td colspan="3"><div class="empty-state">${escapeHtml(message)}</div></td></tr>`;
   elements.participantsList.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   elements.customShareList.innerHTML = "";
   elements.expenseHistory.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+  elements.drawerEquivalentGrid.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+  elements.roomKeyDisplay.textContent = "--------";
+  elements.drawerRoomName.textContent = message;
+  elements.activeRoomChip.textContent = "No room selected";
+  elements.settlementPayeeSelect.innerHTML = `<option value="">No member to pay</option>`;
 }
 
 function renderSummary() {
@@ -304,26 +375,27 @@ function renderSummary() {
   elements.totalSpent.textContent = formatCurrency(summary.total_spent);
 }
 
-function renderFunEquivalents() {
-  const funEquivalents = state.summary?.fun_equivalents || [];
-  if (!funEquivalents.length) {
-    elements.equivalentGrid.innerHTML = `<div class="empty-state">Add some expenses to unlock the fun math.</div>`;
+function renderDebtTable() {
+  if (!state.debtRows.length) {
+    elements.debtTableBody.innerHTML = `<tr><td colspan="4"><div class="empty-state">You are settled up in this room.</div></td></tr>`;
     return;
   }
 
-  elements.equivalentGrid.innerHTML = funEquivalents
-    .map((item) => `
-      <article class="equivalent-card">
-        <p class="equivalent-card__label">${escapeHtml(item.label)}</p>
-        <strong>${item.quantity}</strong>
-      </article>
+  elements.debtTableBody.innerHTML = state.debtRows
+    .map((row) => `
+      <tr>
+        <td>${escapeHtml(row.creditor_name)}</td>
+        <td class="amount-negative">${formatCurrency(row.remaining_amount)}</td>
+        <td>${escapeHtml(formatDate(row.expense_date))}</td>
+        <td>${escapeHtml(row.message)}</td>
+      </tr>
     `)
     .join("");
 }
 
 function renderBalancesTable() {
   if (!state.balances.length) {
-    elements.balancesTableBody.innerHTML = `<tr><td colspan="3"><div class="empty-state">Everything is settled for this group.</div></td></tr>`;
+    elements.balancesTableBody.innerHTML = `<tr><td colspan="3"><div class="empty-state">Everything is settled for this room.</div></td></tr>`;
     return;
   }
 
@@ -389,16 +461,38 @@ function renderCustomShareInputs() {
 }
 
 function renderExpenseHistory() {
-  if (!state.expenses.length) {
-    elements.expenseHistory.innerHTML = `<div class="empty-state">No expenses yet for this group.</div>`;
+  const combined = [
+    ...state.expenses.map((expense) => ({ type: "expense", sortDate: `${expense.expense_date}T00:00:00`, payload: expense })),
+    ...state.settlements.map((settlement) => ({ type: "settlement", sortDate: settlement.paid_at, payload: settlement }))
+  ].sort((left, right) => new Date(right.sortDate).getTime() - new Date(left.sortDate).getTime());
+
+  if (!combined.length) {
+    elements.expenseHistory.innerHTML = `<div class="empty-state">No expenses or payments yet for this room.</div>`;
     return;
   }
 
-  elements.expenseHistory.innerHTML = state.expenses
-    .map((expense) => {
+  elements.expenseHistory.innerHTML = combined
+    .map((entry) => {
+      if (entry.type === "settlement") {
+        const settlement = entry.payload;
+        return `
+          <article class="history-item">
+            <div class="history-item__settlement">
+              <div>
+                <strong>${escapeHtml(settlement.from_member_name)} paid ${escapeHtml(settlement.to_member_name)}</strong>
+                <p class="history-item__meta">${escapeHtml(formatDateTime(settlement.paid_at))}</p>
+              </div>
+              <span class="history-item__amount">${formatCurrency(settlement.amount)}</span>
+            </div>
+            <p class="history-item__participants">${escapeHtml(settlement.note || "Settlement payment recorded from the cash selector.")}</p>
+          </article>
+        `;
+      }
+
+      const expense = entry.payload;
       const shareSummary = expense.shares
         .map((share) => `${share.member_name}: ${formatCurrency(share.owed_amount)}`)
-        .join(" • ");
+        .join(" | ");
 
       const deleteButton = expense.created_by_member_id === state.currentMember.id
         ? `<div class="history-item__actions"><button type="button" data-delete-expense-id="${expense.id}">Delete expense</button></div>`
@@ -409,7 +503,7 @@ function renderExpenseHistory() {
           <div class="history-item__top">
             <div>
               <strong>${escapeHtml(expense.title)}</strong>
-              <p class="history-item__meta">Paid by ${escapeHtml(expense.paid_by_name)} on ${escapeHtml(expense.expense_date)}</p>
+              <p class="history-item__meta">Paid by ${escapeHtml(expense.paid_by_name)} on ${escapeHtml(formatDate(expense.expense_date))}</p>
             </div>
             <span class="history-item__amount">${formatCurrency(expense.amount)}</span>
           </div>
@@ -428,10 +522,26 @@ function renderExpenseHistory() {
   });
 }
 
+function renderSettlementPayees() {
+  const payees = state.balances.filter((row) => row.direction === "you_owe");
+  if (!payees.length) {
+    elements.settlementPayeeSelect.innerHTML = `<option value="">No outstanding payees</option>`;
+    return;
+  }
+
+  elements.settlementPayeeSelect.innerHTML = payees
+    .map((row) => `
+      <option value="${row.member_id}">
+        ${escapeHtml(row.counterparty_name)} (${formatCurrency(row.amount)})
+      </option>
+    `)
+    .join("");
+}
+
 async function handleCreateExpense(event) {
   event.preventDefault();
   if (!state.currentMember || !state.activeGroupId) {
-    setStatus(elements.expenseStatus, "Pick a group before adding expenses.");
+    setStatus(elements.expenseStatus, "Pick a room before adding expenses.");
     return;
   }
 
@@ -443,10 +553,8 @@ async function handleCreateExpense(event) {
   }
 
   const amount = Number(formData.get("amount"));
-  const splitMode = formData.get("splitMode");
-  const customShares = splitMode === "custom"
-    ? getCustomShares(participantIds)
-    : [];
+  const splitMode = String(formData.get("splitMode"));
+  const customShares = splitMode === "custom" ? getCustomShares(participantIds) : [];
 
   if (splitMode === "custom") {
     const shareTotal = customShares.reduce((total, item) => total + item.owed_amount, 0);
@@ -492,60 +600,176 @@ async function handleDeleteExpense(expenseId) {
   }
 }
 
+async function handleCashValueSelected(event) {
+  if (!state.currentMember || !state.activeGroupId) {
+    setStatus(elements.paymentStatus, "Open a room before recording a payment.");
+    return;
+  }
+
+  const payeeId = elements.settlementPayeeSelect.value;
+  if (!payeeId) {
+    setStatus(elements.paymentStatus, "Choose who you paid before selecting an amount.");
+    return;
+  }
+
+  const payload = {
+    group_id: state.activeGroupId,
+    to_member_id: payeeId,
+    amount: event.detail.amount,
+    paid_at: event.detail.timestamp,
+    note: `Cash selector settlement from ${event.detail.sourceButton}`
+  };
+
+  try {
+    setStatus(elements.paymentStatus, "Recording settlement...");
+    await createSettlement(state.currentMember.session_token, payload);
+    await loadActiveGroupData();
+    closePaymentSheet();
+    setStatus(elements.expenseStatus, "Settlement saved.");
+  } catch (error) {
+    setStatus(elements.paymentStatus, error.message || "Could not save settlement.");
+  }
+}
+
 function handleLogout() {
   state.currentMember = null;
   state.availableGroups = [];
   state.activeGroupId = null;
   state.groupMembers = [];
-  state.balances = [];
   state.expenses = [];
+  state.settlements = [];
+  state.balances = [];
+  state.debtRows = [];
   state.summary = null;
   clearSession();
+  closePaymentSheet();
+  elements.memberDrawer.classList.remove("is-open");
+  elements.memberDrawerToggle.setAttribute("aria-expanded", "false");
   elements.authPanel.hidden = false;
   elements.workspacePanel.hidden = true;
   setStatus(elements.authStatus, "Logged out.");
 }
 
-function computeBalances(expenses, members, currentMemberId) {
-  const memberLookup = new Map(members.map((member) => [member.id, member.display_name]));
-  const pairTotals = new Map();
+function toggleMemberDrawer() {
+  if (!isTapDrawerMode()) {
+    return;
+  }
+
+  const isOpen = elements.memberDrawer.classList.toggle("is-open");
+  elements.memberDrawerToggle.setAttribute("aria-expanded", String(isOpen));
+}
+
+function openPaymentSheet() {
+  if (!state.currentMember || !state.activeGroupId) {
+    setStatus(elements.expenseStatus, "Log in and open a room before recording a payment.");
+    return;
+  }
+
+  elements.paymentSheet.hidden = false;
+  elements.paymentSheet.setAttribute("aria-hidden", "false");
+  elements.body.classList.add("is-sheet-open");
+  setStatus(
+    elements.paymentStatus,
+    state.balances.some((row) => row.direction === "you_owe")
+      ? "Long-press a base amount, then aim the wheel for the final cash value."
+      : "You do not owe anyone in this room right now."
+  );
+}
+
+function closePaymentSheet() {
+  elements.paymentSheet.hidden = true;
+  elements.paymentSheet.setAttribute("aria-hidden", "true");
+  elements.body.classList.remove("is-sheet-open");
+}
+
+function computeBalances(expenses, settlements, members, currentMemberId) {
+  const memberLookup = new Map(members.map((member) => [String(member.id), member.display_name]));
+  const counterpartyMap = new Map();
+  const currentId = String(currentMemberId);
 
   expenses.forEach((expense) => {
     expense.shares.forEach((share) => {
-      if (share.member_id === expense.paid_by_member_id) {
+      if (String(share.member_id) === String(expense.paid_by_member_id)) {
         return;
       }
 
       const debtorId = String(share.member_id);
       const creditorId = String(expense.paid_by_member_id);
-      const key = `${debtorId}->${creditorId}`;
-      pairTotals.set(key, (pairTotals.get(key) || 0) + share.owed_amount);
+
+      if (creditorId === currentId) {
+        counterpartyMap.set(debtorId, (counterpartyMap.get(debtorId) || 0) + share.owed_amount);
+      }
+
+      if (debtorId === currentId) {
+        counterpartyMap.set(creditorId, (counterpartyMap.get(creditorId) || 0) - share.owed_amount);
+      }
     });
   });
 
-  const counterpartyMap = new Map();
+  settlements.forEach((settlement) => {
+    const fromId = String(settlement.from_member_id);
+    const toId = String(settlement.to_member_id);
 
-  pairTotals.forEach((amount, key) => {
-    const [debtorId, creditorId] = key.split("->");
-    const currentId = String(currentMemberId);
-
-    if (debtorId !== currentId && creditorId !== currentId) {
-      return;
+    if (fromId === currentId) {
+      counterpartyMap.set(toId, (counterpartyMap.get(toId) || 0) + settlement.amount);
     }
 
-    const counterpartyId = debtorId === currentId ? creditorId : debtorId;
-    const signedAmount = debtorId === currentId ? -amount : amount;
-    counterpartyMap.set(counterpartyId, (counterpartyMap.get(counterpartyId) || 0) + signedAmount);
+    if (toId === currentId) {
+      counterpartyMap.set(fromId, (counterpartyMap.get(fromId) || 0) - settlement.amount);
+    }
   });
 
   return Array.from(counterpartyMap.entries())
     .map(([memberId, signedAmount]) => ({
+      member_id: memberId,
       counterparty_name: memberLookup.get(memberId) || "Unknown",
       direction: signedAmount > 0 ? "owes_you" : signedAmount < 0 ? "you_owe" : "settled",
       amount: Math.abs(roundCurrency(signedAmount))
     }))
     .filter((row) => row.amount > 0)
     .sort((left, right) => left.counterparty_name.localeCompare(right.counterparty_name));
+}
+
+function computeOutstandingDebtRows(expenses, settlements, currentMemberId) {
+  const currentId = String(currentMemberId);
+
+  const rawDebtRows = expenses
+    .flatMap((expense) => expense.shares
+      .filter((share) => String(share.member_id) === currentId && String(expense.paid_by_member_id) !== currentId)
+      .map((share) => ({
+        creditor_id: String(expense.paid_by_member_id),
+        creditor_name: expense.paid_by_name,
+        expense_date: expense.expense_date,
+        message: expense.title,
+        remaining_amount: roundCurrency(share.owed_amount)
+      })))
+    .sort((left, right) => new Date(left.expense_date).getTime() - new Date(right.expense_date).getTime());
+
+  const settlementCredits = settlements.reduce((accumulator, settlement) => {
+    if (String(settlement.from_member_id) !== currentId) {
+      return accumulator;
+    }
+
+    const key = String(settlement.to_member_id);
+    accumulator.set(key, (accumulator.get(key) || 0) + settlement.amount);
+    return accumulator;
+  }, new Map());
+
+  return rawDebtRows
+    .map((row) => {
+      const availableCredit = settlementCredits.get(row.creditor_id) || 0;
+      const applied = Math.min(availableCredit, row.remaining_amount);
+      const remaining = roundCurrency(row.remaining_amount - applied);
+
+      settlementCredits.set(row.creditor_id, roundCurrency(availableCredit - applied));
+
+      return {
+        ...row,
+        remaining_amount: remaining
+      };
+    })
+    .filter((row) => row.remaining_amount > 0)
+    .sort((left, right) => new Date(right.expense_date).getTime() - new Date(left.expense_date).getTime());
 }
 
 function computeSummary(expenses, balances, currentMemberId) {
@@ -592,22 +816,25 @@ function normalizeMember(member) {
   return {
     id: member.member_id || member.id,
     display_name: member.display_name || member.member_name || member.name,
+    email: member.email || "",
     preferred_currency: member.preferred_currency || APP_CONFIG.defaultCurrency,
     session_token: member.session_token
   };
 }
 
 function formatCurrency(value) {
-  const currency = getActiveCurrency();
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency
+    currency: getActiveCurrency()
   }).format(value || 0);
 }
 
 function getActiveCurrency() {
-  const activeGroup = state.availableGroups.find((group) => String(group.id) === String(state.activeGroupId));
-  return activeGroup?.currency_code || state.currentMember?.preferred_currency || APP_CONFIG.defaultCurrency;
+  return getActiveGroup()?.currency_code || state.currentMember?.preferred_currency || APP_CONFIG.defaultCurrency;
+}
+
+function getActiveGroup() {
+  return state.availableGroups.find((group) => String(group.id) === String(state.activeGroupId)) || null;
 }
 
 function formatDirection(direction) {
@@ -621,6 +848,32 @@ function formatDirection(direction) {
   }
 }
 
+function formatDate(value) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  }).format(new Date(value));
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 function setStatus(element, message) {
   element.textContent = message;
 }
@@ -631,6 +884,10 @@ function nearlyEqual(a, b) {
 
 function roundCurrency(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function isTapDrawerMode() {
+  return window.matchMedia("(max-width: 980px), (hover: none)").matches;
 }
 
 function escapeHtml(value) {

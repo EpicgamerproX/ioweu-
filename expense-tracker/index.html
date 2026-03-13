@@ -14,20 +14,20 @@
     <header class="hero">
       <div class="hero__copy">
         <p class="eyebrow">Shared money, untangled</p>
-        <h1>Track every group expense without losing the thread.</h1>
+        <h1>Track every room expense without losing the thread.</h1>
         <p class="hero__text">
-          Log in with your group passcode, add what you paid for, and instantly see
-          who owes you, who you owe, and what your spending could have bought instead.
+          Log in with your credentials, join rooms with a unique key, and keep a live ledger
+          of who owes whom, what got paid back, and what your spend could have bought instead.
         </p>
       </div>
       <div class="hero__badge-panel">
         <div class="hero__badge">
-          <span class="hero__badge-label">Backed by</span>
-          <strong>Supabase</strong>
+          <span class="hero__badge-label">Room flow</span>
+          <strong>Unique room keys</strong>
         </div>
         <div class="hero__badge">
-          <span class="hero__badge-label">Built for</span>
-          <strong>Groups with receipts</strong>
+          <span class="hero__badge-label">Settlement mode</span>
+          <strong>Cash wheel enabled</strong>
         </div>
       </div>
     </header>
@@ -36,23 +36,23 @@
       <section class="panel panel--auth" id="auth-panel">
         <div class="panel__header">
           <p class="panel__kicker">Access</p>
-          <h2>Login or join a group</h2>
+          <h2>Log in or create your room</h2>
         </div>
 
         <div class="tabs" role="tablist" aria-label="Authentication options">
           <button class="tabs__button is-active" id="login-tab" data-tab-target="login-view" type="button" role="tab" aria-selected="true">Login</button>
-          <button class="tabs__button" id="signup-tab" data-tab-target="signup-view" type="button" role="tab" aria-selected="false">Self-signup</button>
+          <button class="tabs__button" id="signup-tab" data-tab-target="signup-view" type="button" role="tab" aria-selected="false">Sign up</button>
         </div>
 
         <div class="tab-panel is-active" id="login-view" role="tabpanel" aria-labelledby="login-tab">
           <form id="login-form" class="stack">
             <label class="field">
-              <span>Name</span>
-              <input id="login-name" name="name" type="text" autocomplete="username" placeholder="Aditi" required>
+              <span>Email</span>
+              <input id="login-email" name="email" type="email" autocomplete="email" placeholder="aditi@example.com" required>
             </label>
             <label class="field">
-              <span>Passcode</span>
-              <input id="login-passcode" name="passcode" type="password" autocomplete="current-password" placeholder="Group secret" required>
+              <span>Password</span>
+              <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Enter password" required>
             </label>
             <button class="button button--primary" type="submit">Enter dashboard</button>
           </form>
@@ -60,23 +60,31 @@
 
         <div class="tab-panel" id="signup-view" role="tabpanel" aria-labelledby="signup-tab" hidden>
           <form id="signup-form" class="stack">
+            <div class="grid-2">
+              <label class="field">
+                <span>Your name</span>
+                <input id="signup-display-name" name="displayName" type="text" autocomplete="name" placeholder="Rohan" required>
+              </label>
+              <label class="field">
+                <span>Email</span>
+                <input id="signup-email" name="email" type="email" autocomplete="email" placeholder="rohan@example.com" required>
+              </label>
+            </div>
+            <div class="grid-2">
+              <label class="field">
+                <span>Password</span>
+                <input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="Choose a password" required>
+              </label>
+              <label class="field">
+                <span>Display currency</span>
+                <input id="signup-currency" name="currency" type="text" maxlength="3" value="INR" required>
+              </label>
+            </div>
             <label class="field">
-              <span>Your name</span>
-              <input id="signup-name" name="name" type="text" autocomplete="name" placeholder="Rohan" required>
+              <span>Initial room name</span>
+              <input id="signup-room-name" name="roomName" type="text" placeholder="Weekend Trip" required>
             </label>
-            <label class="field">
-              <span>Passcode</span>
-              <input id="signup-passcode" name="passcode" type="password" autocomplete="new-password" placeholder="Choose a passcode" required>
-            </label>
-            <label class="field">
-              <span>Display currency</span>
-              <input id="signup-currency" name="currency" type="text" maxlength="3" value="INR" required>
-            </label>
-            <label class="field">
-              <span>Group name</span>
-              <input id="signup-group-name" name="groupName" type="text" placeholder="Weekend Trip" required>
-            </label>
-            <button class="button button--accent" type="submit">Create profile and group</button>
+            <button class="button button--accent" type="submit">Create account and room</button>
           </form>
         </div>
 
@@ -84,24 +92,44 @@
       </section>
 
       <section class="panel panel--workspace" id="workspace-panel" hidden>
+        <aside class="member-drawer" id="member-drawer">
+          <button class="member-drawer__toggle" id="member-drawer-toggle" type="button" aria-expanded="false" aria-controls="member-drawer-panel">
+            <span class="member-drawer__label">Signed in</span>
+            <strong id="member-drawer-name">Member</strong>
+          </button>
+          <div class="member-drawer__panel" id="member-drawer-panel">
+            <div class="drawer-card">
+              <p class="panel__kicker">Dashboard</p>
+              <h3 id="drawer-title">Your spend story</h3>
+              <p class="drawer-room" id="drawer-room-name"></p>
+            </div>
+            <div class="drawer-card drawer-card--key">
+              <span class="drawer-key__label">Room key</span>
+              <strong id="room-key-display">--------</strong>
+            </div>
+            <div class="equivalent-grid equivalent-grid--drawer" id="drawer-equivalent-grid"></div>
+            <button class="button button--ghost drawer-logout" id="logout-button" type="button">Logout</button>
+          </div>
+        </aside>
+
         <div class="panel__header panel__header--row">
           <div>
             <p class="panel__kicker">Workspace</p>
             <h2 id="welcome-title">Your balances</h2>
           </div>
-          <button class="button button--ghost" id="logout-button" type="button">Logout</button>
+          <div class="workspace-meta">
+            <span class="workspace-chip" id="active-room-chip">No room selected</span>
+          </div>
         </div>
 
         <div class="group-strip">
-          <div>
-            <label class="field field--compact" for="group-select">
-              <span>Active group</span>
-              <select id="group-select"></select>
-            </label>
-          </div>
-          <form id="join-group-form" class="inline-form">
-            <input id="join-group-name" type="text" placeholder="New group name" required>
-            <button class="button button--ghost" type="submit">Create group</button>
+          <label class="field field--compact" for="group-select">
+            <span>Active room</span>
+            <select id="group-select"></select>
+          </label>
+          <form id="join-room-form" class="inline-form">
+            <input id="join-room-key" name="roomKey" type="text" placeholder="Enter room key" maxlength="12" required>
+            <button class="button button--ghost" type="submit">Join room</button>
           </form>
         </div>
 
@@ -119,7 +147,7 @@
             <strong id="net-balance">Rs0.00</strong>
           </article>
           <article class="metric-card">
-            <span class="metric-card__label">Spent overall</span>
+            <span class="metric-card__label">My paid spend</span>
             <strong id="total-spent">Rs0.00</strong>
           </article>
         </div>
@@ -127,18 +155,30 @@
         <section class="dashboard-section">
           <div class="section-heading">
             <div>
-              <p class="panel__kicker">Fun math</p>
-              <h3>What your spending could have bought</h3>
+              <p class="panel__kicker">Debt board</p>
+              <h3>Everything you currently owe in this room</h3>
             </div>
           </div>
-          <div class="equivalent-grid" id="equivalent-grid"></div>
+          <div class="table-shell table-shell--ledger">
+            <table>
+              <thead>
+                <tr>
+                  <th>Person I owe</th>
+                  <th>Amount</th>
+                  <th>Expense date</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="debt-table-body"></tbody>
+            </table>
+          </div>
         </section>
 
         <section class="dashboard-section">
           <div class="section-heading">
             <div>
               <p class="panel__kicker">Overview</p>
-              <h3>Who owes whom</h3>
+              <h3>Net room balances after payments</h3>
             </div>
           </div>
           <div class="table-shell">
@@ -218,7 +258,7 @@
             <div class="section-heading">
               <div>
                 <p class="panel__kicker">History</p>
-                <h3>Recent expenses</h3>
+                <h3>Recent expenses and settlements</h3>
               </div>
             </div>
             <div id="expense-history" class="history-list"></div>
@@ -227,6 +267,32 @@
       </section>
     </main>
   </div>
+
+  <div class="payment-launcher">
+    <button class="payment-launcher__button" id="paid-button" type="button">Paid</button>
+  </div>
+
+  <section class="payment-sheet" id="payment-sheet" hidden aria-hidden="true">
+    <div class="payment-sheet__backdrop" data-close-payment-sheet="true"></div>
+    <div class="payment-sheet__panel">
+      <div class="payment-sheet__header">
+        <div>
+          <p class="panel__kicker">Settlement</p>
+          <h3>Record cash paid back</h3>
+        </div>
+        <button class="button button--ghost" id="payment-sheet-close" type="button">Close</button>
+      </div>
+      <div class="payment-sheet__controls">
+        <label class="field" for="settlement-payee-select">
+          <span>Who did you pay?</span>
+          <select id="settlement-payee-select"></select>
+        </label>
+        <p class="payment-sheet__hint" id="payment-sheet-hint">Long-press any base amount to open the radial add-on wheel.</p>
+      </div>
+      <div id="cash-selector-root" class="cash-selector-root"></div>
+      <p class="status-message" id="payment-status" aria-live="polite"></p>
+    </div>
+  </section>
 
   <script src="/api/env.js"></script>
   <script>
