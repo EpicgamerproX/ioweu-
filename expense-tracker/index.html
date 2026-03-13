@@ -119,10 +119,13 @@
         </div>
 
         <div class="group-strip">
-          <label class="field field--compact" for="group-select">
-            <span>Active room</span>
-            <select id="group-select"></select>
-          </label>
+          <div class="group-strip__active">
+            <label class="field field--compact" for="group-select">
+              <span>Active room</span>
+              <select id="group-select"></select>
+            </label>
+            <p class="group-strip__room-id" id="active-room-id-display">Room ID: --------</p>
+          </div>
           <div class="room-actions">
             <button class="button button--accent" id="create-room-toggle" type="button">Create room</button>
             <form id="join-room-form" class="inline-form">

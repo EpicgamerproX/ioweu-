@@ -35,6 +35,7 @@ const elements = {
   loginForm: document.querySelector("#login-form"),
   signupForm: document.querySelector("#signup-form"),
   groupSelect: document.querySelector("#group-select"),
+  activeRoomIdDisplay: document.querySelector("#active-room-id-display"),
   createRoomPanel: document.querySelector("#create-room-panel"),
   createRoomForm: document.querySelector("#create-room-form"),
   createRoomToggle: document.querySelector("#create-room-toggle"),
@@ -296,7 +297,7 @@ async function handleJoinRoom(event) {
     return;
   }
 
-  setStatus(elements.expenseStatus, "Joining room...");
+  setStatus(elements.expenseStatus, "Loading...");
 
   try {
     const joined = await joinGroupByRoomKey(state.currentMember.session_token, roomKey);
@@ -308,7 +309,7 @@ async function handleJoinRoom(event) {
     await loadActiveGroupData();
     event.currentTarget.reset();
     saveSession();
-    setStatus(elements.expenseStatus, `Joined ${joined.group_name}.`);
+    setStatus(elements.expenseStatus, `Success! Joined ${joined.group_name}.`);
   } catch (error) {
     setStatus(elements.expenseStatus, error.message || "Could not join room.");
   }
@@ -371,6 +372,9 @@ function renderWorkspace() {
 
 function renderDrawer() {
   const activeGroup = getActiveGroup();
+  elements.activeRoomIdDisplay.textContent = activeGroup
+    ? `Room ID: ${activeGroup.room_key}`
+    : "Room ID: --------";
   elements.drawerRoomName.textContent = activeGroup
     ? `${activeGroup.name} room`
     : "No room selected";
@@ -409,6 +413,7 @@ function renderEmptyWorkspace(message) {
   elements.roomKeyDisplay.textContent = "--------";
   elements.drawerRoomName.textContent = message;
   elements.activeRoomChip.textContent = "No room selected";
+  elements.activeRoomIdDisplay.textContent = "Room ID: --------";
   closeCreateRoomPanel({ preserveStatus: true });
   resetAmountBuilder(true);
   renderAmountBuilder(message);

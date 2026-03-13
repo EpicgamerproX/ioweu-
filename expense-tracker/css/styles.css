@@ -250,6 +250,17 @@ select {
   flex-wrap: wrap;
 }
 
+.group-strip__active {
+  display: grid;
+  gap: 8px;
+}
+
+.group-strip__room-id {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .room-actions,
 .room-creator__actions {
   display: flex;
@@ -867,6 +878,7 @@ tbody tr:last-child td {
   .panel__header--row,
   .section-heading,
   .group-strip,
+  .group-strip__active,
   .inline-form,
   .room-actions,
   .room-creator__actions,
