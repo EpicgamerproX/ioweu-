@@ -252,6 +252,24 @@
             </form>
 
             <p class="status-message" id="expense-status" aria-live="polite"></p>
+
+            <div class="settlement-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="panel__kicker">Record payment</p>
+                  <h3>Log money you already paid back</h3>
+                </div>
+              </div>
+              <div class="settlement-panel__controls">
+                <label class="field" for="settlement-payee-select">
+                  <span>Who did you pay?</span>
+                  <select id="settlement-payee-select"></select>
+                </label>
+                <p class="payment-sheet__hint" id="payment-sheet-hint">Long-press any base amount to open the radial add-on wheel.</p>
+              </div>
+              <div id="cash-selector-root" class="cash-selector-root"></div>
+              <p class="status-message" id="payment-status" aria-live="polite"></p>
+            </div>
           </div>
 
           <div class="expense-panel">
@@ -267,32 +285,6 @@
       </section>
     </main>
   </div>
-
-  <div class="payment-launcher">
-    <button class="payment-launcher__button" id="paid-button" type="button">Paid</button>
-  </div>
-
-  <section class="payment-sheet" id="payment-sheet" hidden aria-hidden="true">
-    <div class="payment-sheet__backdrop" data-close-payment-sheet="true"></div>
-    <div class="payment-sheet__panel">
-      <div class="payment-sheet__header">
-        <div>
-          <p class="panel__kicker">Settlement</p>
-          <h3>Record cash paid back</h3>
-        </div>
-        <button class="button button--ghost" id="payment-sheet-close" type="button">Close</button>
-      </div>
-      <div class="payment-sheet__controls">
-        <label class="field" for="settlement-payee-select">
-          <span>Who did you pay?</span>
-          <select id="settlement-payee-select"></select>
-        </label>
-        <p class="payment-sheet__hint" id="payment-sheet-hint">Long-press any base amount to open the radial add-on wheel.</p>
-      </div>
-      <div id="cash-selector-root" class="cash-selector-root"></div>
-      <p class="status-message" id="payment-status" aria-live="polite"></p>
-    </div>
-  </section>
 
   <script src="/api/env.js"></script>
   <script>

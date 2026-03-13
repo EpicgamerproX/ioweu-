@@ -26,7 +26,6 @@ const state = {
 };
 
 const elements = {
-  body: document.body,
   authPanel: document.querySelector("#auth-panel"),
   workspacePanel: document.querySelector("#workspace-panel"),
   authStatus: document.querySelector("#auth-status"),
@@ -61,9 +60,6 @@ const elements = {
   tabPanels: document.querySelectorAll(".tab-panel"),
   memberDrawer: document.querySelector("#member-drawer"),
   memberDrawerToggle: document.querySelector("#member-drawer-toggle"),
-  paidButton: document.querySelector("#paid-button"),
-  paymentSheet: document.querySelector("#payment-sheet"),
-  paymentSheetClose: document.querySelector("#payment-sheet-close"),
   settlementPayeeSelect: document.querySelector("#settlement-payee-select"),
   cashSelectorRoot: document.querySelector("#cash-selector-root")
 };
@@ -85,13 +81,6 @@ function bindEvents() {
   elements.splitMode.addEventListener("change", renderCustomShareInputs);
   elements.logoutButton.addEventListener("click", handleLogout);
   elements.memberDrawerToggle.addEventListener("click", toggleMemberDrawer);
-  elements.paidButton.addEventListener("click", openPaymentSheet);
-  elements.paymentSheetClose.addEventListener("click", closePaymentSheet);
-  elements.paymentSheet.addEventListener("click", (event) => {
-    if (event.target instanceof HTMLElement && event.target.dataset.closePaymentSheet === "true") {
-      closePaymentSheet();
-    }
-  });
   elements.cashSelectorRoot.addEventListener("cashValueSelected", handleCashValueSelected);
 
   elements.tabButtons.forEach((button) => {
@@ -258,6 +247,7 @@ async function handleJoinRoom(event) {
     event.currentTarget.reset();
     saveSession();
     setStatus(elements.expenseStatus, `Joined ${joined.group_name}.`);
+    setStatus(elements.paymentStatus, "Long-press a base amount, then aim the wheel for the final cash value.");
   } catch (error) {
     setStatus(elements.expenseStatus, error.message || "Could not join room.");
   }
@@ -287,7 +277,6 @@ async function loadActiveGroupData() {
 
     renderWorkspace();
     setStatus(elements.expenseStatus, "");
-    setStatus(elements.paymentStatus, "");
   } catch (error) {
     renderEmptyWorkspace(error.message || "Unable to load room data.");
   }
@@ -358,6 +347,7 @@ function renderEmptyWorkspace(message) {
   elements.drawerRoomName.textContent = message;
   elements.activeRoomChip.textContent = "No room selected";
   elements.settlementPayeeSelect.innerHTML = `<option value="">No member to pay</option>`;
+  setStatus(elements.paymentStatus, "");
 }
 
 function renderSummary() {
@@ -526,6 +516,7 @@ function renderSettlementPayees() {
   const payees = state.balances.filter((row) => row.direction === "you_owe");
   if (!payees.length) {
     elements.settlementPayeeSelect.innerHTML = `<option value="">No outstanding payees</option>`;
+    setStatus(elements.paymentStatus, "You do not owe anyone in this room right now.");
     return;
   }
 
@@ -536,6 +527,8 @@ function renderSettlementPayees() {
       </option>
     `)
     .join("");
+
+  setStatus(elements.paymentStatus, "Long-press a base amount, then aim the wheel for the final cash value.");
 }
 
 async function handleCreateExpense(event) {
@@ -624,7 +617,6 @@ async function handleCashValueSelected(event) {
     setStatus(elements.paymentStatus, "Recording settlement...");
     await createSettlement(state.currentMember.session_token, payload);
     await loadActiveGroupData();
-    closePaymentSheet();
     setStatus(elements.expenseStatus, "Settlement saved.");
   } catch (error) {
     setStatus(elements.paymentStatus, error.message || "Could not save settlement.");
@@ -642,7 +634,6 @@ function handleLogout() {
   state.debtRows = [];
   state.summary = null;
   clearSession();
-  closePaymentSheet();
   elements.memberDrawer.classList.remove("is-open");
   elements.memberDrawerToggle.setAttribute("aria-expanded", "false");
   elements.authPanel.hidden = false;
@@ -657,29 +648,6 @@ function toggleMemberDrawer() {
 
   const isOpen = elements.memberDrawer.classList.toggle("is-open");
   elements.memberDrawerToggle.setAttribute("aria-expanded", String(isOpen));
-}
-
-function openPaymentSheet() {
-  if (!state.currentMember || !state.activeGroupId) {
-    setStatus(elements.expenseStatus, "Log in and open a room before recording a payment.");
-    return;
-  }
-
-  elements.paymentSheet.hidden = false;
-  elements.paymentSheet.setAttribute("aria-hidden", "false");
-  elements.body.classList.add("is-sheet-open");
-  setStatus(
-    elements.paymentStatus,
-    state.balances.some((row) => row.direction === "you_owe")
-      ? "Long-press a base amount, then aim the wheel for the final cash value."
-      : "You do not owe anyone in this room right now."
-  );
-}
-
-function closePaymentSheet() {
-  elements.paymentSheet.hidden = true;
-  elements.paymentSheet.setAttribute("aria-hidden", "true");
-  elements.body.classList.remove("is-sheet-open");
 }
 
 function computeBalances(expenses, settlements, members, currentMemberId) {

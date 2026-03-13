@@ -40,10 +40,6 @@ body {
     linear-gradient(135deg, #f7f0e3 0%, #ece3d3 40%, #efe9dc 100%);
 }
 
-body.is-sheet-open {
-  overflow: hidden;
-}
-
 button,
 input,
 select {
@@ -345,6 +341,19 @@ tbody tr:last-child td {
   padding: 18px;
 }
 
+.settlement-panel {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(64, 39, 19, 0.12);
+  display: grid;
+  gap: 16px;
+}
+
+.settlement-panel__controls {
+  display: grid;
+  gap: 12px;
+}
+
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -489,14 +498,18 @@ tbody tr:last-child td {
 }
 
 .member-drawer__panel {
-  padding: 0 18px 18px;
+  max-height: 0;
+  padding: 0 18px;
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
-  transition: opacity 180ms ease, transform 180ms ease;
+  overflow: hidden;
+  transition: max-height 220ms ease, padding 220ms ease, opacity 180ms ease, transform 180ms ease;
 }
 
 .member-drawer.is-open .member-drawer__panel {
+  max-height: 70vh;
+  padding: 0 18px 18px;
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
@@ -504,6 +517,8 @@ tbody tr:last-child td {
 
 @media (hover: hover) and (pointer: fine) {
   .member-drawer:hover .member-drawer__panel {
+    max-height: 70vh;
+    padding: 0 18px 18px;
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
@@ -527,62 +542,11 @@ tbody tr:last-child td {
   width: 100%;
 }
 
-.payment-launcher {
-  position: fixed;
-  left: 24px;
-  bottom: 24px;
-  z-index: 40;
-}
-
-.payment-launcher__button {
-  padding: 16px 22px;
-  background: linear-gradient(135deg, #24160d, #4d2914);
-  color: #fff8ef;
-  font-weight: 700;
-  box-shadow: 0 18px 30px rgba(36, 22, 13, 0.24);
-}
-
-.payment-sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-}
-
-.payment-sheet[hidden] {
-  display: none;
-}
-
-.payment-sheet__backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(22, 17, 14, 0.48);
-  backdrop-filter: blur(10px);
-}
-
-.payment-sheet__panel {
-  position: absolute;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  width: min(920px, calc(100% - 32px));
-  border-radius: 30px;
-  background: linear-gradient(180deg, rgba(30, 24, 20, 0.96), rgba(19, 16, 14, 0.98));
-  color: #f7efe6;
-  border: 1px solid var(--line-dark);
-  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
-  padding: 22px;
-}
-
-.payment-sheet__controls {
-  align-items: end;
-}
-
-.payment-sheet__controls .field span,
-.payment-sheet .panel__kicker {
+.settlement-panel .field span {
   color: rgba(255, 247, 236, 0.66);
 }
 
-.payment-sheet__controls select {
+.settlement-panel select {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.12);
   color: #fff8ef;
@@ -840,15 +804,24 @@ tbody tr:last-child td {
 
 @media (max-width: 720px) {
   .page-shell {
-    width: min(100% - 20px, 1240px);
-    padding-top: 20px;
+    width: min(100% - 16px, 1240px);
+    padding-top: 16px;
+    padding-bottom: 40px;
   }
 
   .hero__copy,
   .panel,
-  .payment-sheet__panel,
   .cash-selector {
-    padding: 20px;
+    padding: 18px;
+  }
+
+  body {
+    font-size: 17px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.2rem, 10vw, 3.2rem);
+    line-height: 1;
   }
 
   .grid-2 {
@@ -862,8 +835,7 @@ tbody tr:last-child td {
   .history-item__top,
   .history-item__meta,
   .history-item__settlement,
-  .payment-sheet__header,
-  .payment-sheet__controls {
+  .settlement-panel__controls {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -872,18 +844,26 @@ tbody tr:last-child td {
   .inline-form,
   .inline-form input,
   .inline-form button,
-  .payment-sheet__controls .field {
+  .settlement-panel__controls .field {
     width: 100%;
   }
 
-  .payment-launcher {
-    left: 16px;
-    right: 16px;
-    bottom: 16px;
+  .button,
+  .tabs__button,
+  .field input,
+  .field select,
+  .inline-form input {
+    min-height: 50px;
   }
 
-  .payment-launcher__button {
-    width: 100%;
+  .metric-card strong,
+  .history-item__amount,
+  .drawer-card strong {
+    font-size: 1.35rem;
+  }
+
+  .member-drawer__toggle {
+    padding: 16px 18px;
   }
 
   .cash-selector__grid {
@@ -895,5 +875,26 @@ tbody tr:last-child td {
     width: 220px;
     height: 220px;
     margin: -110px 0 0 -110px;
+  }
+
+  .cash-selector-root,
+  .cash-selector {
+    min-height: 340px;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-grid,
+  .equivalent-grid--drawer {
+    grid-template-columns: 1fr;
+  }
+
+  .table-shell table,
+  .table-shell--ledger table {
+    min-width: 620px;
+  }
+
+  .cash-selector__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
