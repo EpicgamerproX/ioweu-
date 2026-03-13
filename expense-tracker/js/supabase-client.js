@@ -20,6 +20,24 @@ async function unwrapSingle(query, fallbackMessage) {
   return data;
 }
 
+function normalizeGroup(group) {
+  if (!group) {
+    return {
+      id: null,
+      name: "",
+      room_key: "",
+      currency_code: APP_CONFIG.defaultCurrency
+    };
+  }
+
+  return {
+    id: group.group_id || group.id || group.default_group_id || null,
+    name: group.group_name || group.name || "Unnamed room",
+    room_key: group.room_key || group.roomKey || group.default_room_key || "",
+    currency_code: group.currency_code || group.currencyCode || APP_CONFIG.defaultCurrency
+  };
+}
+
 export async function loginMember(email, password) {
   const data = await unwrapSingle(
     supabase.rpc("login_member", {
@@ -55,7 +73,7 @@ export async function signUpMember({ displayName, email, password, currency }) {
 }
 
 export async function createGroupForMember(sessionToken, { roomName, roomKey, currency }) {
-  return unwrapSingle(
+  const data = await unwrapSingle(
     supabase.rpc("create_group_for_member", {
       session_token_input: sessionToken,
       new_group_name: roomName.trim(),
@@ -64,6 +82,8 @@ export async function createGroupForMember(sessionToken, { roomName, roomKey, cu
     }),
     "Unable to create room."
   );
+
+  return normalizeGroup(data);
 }
 
 export async function fetchGroupsForMember(sessionToken) {
@@ -74,22 +94,19 @@ export async function fetchGroupsForMember(sessionToken) {
     "Unable to load rooms."
   );
 
-  return (data || []).map((row) => ({
-    id: row.group_id,
-    name: row.group_name,
-    room_key: row.room_key,
-    currency_code: row.currency_code || APP_CONFIG.defaultCurrency
-  }));
+  return (data || []).map(normalizeGroup);
 }
 
 export async function joinGroupByRoomKey(sessionToken, roomKey) {
-  return unwrapSingle(
+  const data = await unwrapSingle(
     supabase.rpc("join_group_by_room_key", {
       session_token_input: sessionToken,
       room_key_input: roomKey.trim().toUpperCase()
     }),
     "Unable to join room."
   );
+
+  return normalizeGroup(data);
 }
 
 export async function fetchGroupMembers(sessionToken, groupId) {

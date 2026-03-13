@@ -358,7 +358,7 @@ function renderGroups() {
   elements.groupSelect.innerHTML = state.availableGroups
     .map((group) => {
       const selected = group.id === state.activeGroupId ? "selected" : "";
-      return `<option value="${group.id}" ${selected}>${escapeHtml(group.name)} (${escapeHtml(group.room_key)})</option>`;
+      return `<option value="${group.id}" ${selected}>${escapeHtml(group.name)} (${escapeHtml(getGroupRoomKey(group))})</option>`;
     })
     .join("");
 }
@@ -375,15 +375,16 @@ function renderWorkspace() {
 
 function renderDrawer() {
   const activeGroup = getActiveGroup();
+  const roomKey = getGroupRoomKey(activeGroup);
   elements.activeRoomIdDisplay.textContent = activeGroup
-    ? `Room ID: ${activeGroup.room_key}`
+    ? `Room ID: ${roomKey}`
     : "Room ID: --------";
   elements.drawerRoomName.textContent = activeGroup
     ? `${activeGroup.name} room`
     : "No room selected";
-  elements.roomKeyDisplay.textContent = activeGroup?.room_key || "--------";
+  elements.roomKeyDisplay.textContent = roomKey;
   elements.activeRoomChip.textContent = activeGroup
-    ? `${activeGroup.name} | ${activeGroup.room_key}`
+    ? `${activeGroup.name} | ${roomKey}`
     : "No room selected";
 
   const funEquivalents = state.summary?.fun_equivalents || [];
@@ -967,6 +968,10 @@ function getActiveCurrency() {
 
 function getActiveGroup() {
   return state.availableGroups.find((group) => String(group.id) === String(state.activeGroupId)) || null;
+}
+
+function getGroupRoomKey(group) {
+  return group?.room_key || "--------";
 }
 
 function formatDirection(direction) {
