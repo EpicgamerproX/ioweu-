@@ -170,13 +170,14 @@ async function handleLogin(event) {
   event.preventDefault();
   setStatus(elements.authStatus, "Checking your credentials...");
 
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
 
   try {
     const member = await loginMember(String(formData.get("email")), String(formData.get("password")));
     state.currentMember = normalizeMember(member);
     await bootstrapWorkspace();
-    event.currentTarget.reset();
+    form.reset();
     setStatus(elements.authStatus, "");
   } catch (error) {
     setStatus(elements.authStatus, error.message || "Login failed.");
@@ -187,7 +188,8 @@ async function handleSignup(event) {
   event.preventDefault();
   setStatus(elements.authStatus, "Creating your account...");
 
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
 
   try {
     const member = await signUpMember({
@@ -200,7 +202,7 @@ async function handleSignup(event) {
     state.currentMember = normalizeMember(member);
     state.activeGroupId = null;
     await bootstrapWorkspace();
-    event.currentTarget.reset();
+    form.reset();
     setStatus(elements.authStatus, "");
   } catch (error) {
     setStatus(elements.authStatus, error.message || "Signup failed.");
@@ -291,7 +293,8 @@ async function handleJoinRoom(event) {
     return;
   }
 
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
   const roomKey = String(formData.get("roomKey") || "").trim().toUpperCase();
   if (!roomKey) {
     return;
@@ -307,7 +310,7 @@ async function handleJoinRoom(event) {
     closeCreateRoomPanel();
     renderGroups();
     await loadActiveGroupData();
-    event.currentTarget.reset();
+    form.reset();
     saveSession();
     setStatus(elements.expenseStatus, `Success! Joined ${joined.group_name}.`);
   } catch (error) {
@@ -637,7 +640,8 @@ async function handleCreateExpense(event) {
     return;
   }
 
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
   const participantIds = getSelectedParticipantIds();
   if (!participantIds.length) {
     setStatus(elements.expenseStatus, "Select at least one participant.");
@@ -671,7 +675,7 @@ async function handleCreateExpense(event) {
   try {
     setStatus(elements.expenseStatus, "Saving expense...");
     await createExpense(state.currentMember.session_token, payload);
-    event.currentTarget.reset();
+    form.reset();
     setDefaultDate();
     resetAmountBuilder(false);
     renderExpenseFormMembers();
