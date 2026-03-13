@@ -88,9 +88,15 @@ function bindEvents() {
   elements.loginForm.addEventListener("submit", handleLogin);
   elements.signupForm.addEventListener("submit", handleSignup);
   elements.groupSelect.addEventListener("change", handleGroupChange);
-  elements.createRoomToggle.addEventListener("click", openCreateRoomPanel);
-  elements.createRoomForm.addEventListener("submit", handleCreateRoom);
-  elements.createRoomCancel.addEventListener("click", closeCreateRoomPanel);
+  if (elements.createRoomToggle) {
+    elements.createRoomToggle.addEventListener("click", openCreateRoomPanel);
+  }
+  if (elements.createRoomForm) {
+    elements.createRoomForm.addEventListener("submit", handleCreateRoom);
+  }
+  if (elements.createRoomCancel) {
+    elements.createRoomCancel.addEventListener("click", closeCreateRoomPanel);
+  }
   elements.joinRoomForm.addEventListener("submit", handleJoinRoom);
   elements.expenseForm.addEventListener("submit", handleCreateExpense);
   elements.splitMode.addEventListener("change", renderCustomShareInputs);
@@ -723,10 +729,16 @@ function handleLogout() {
 }
 
 function openCreateRoomPanel() {
+  if (!elements.createRoomPanel || !elements.createRoomName || !elements.createRoomKey) {
+    return;
+  }
+
   elements.createRoomPanel.hidden = false;
   elements.createRoomName.value = "";
   elements.createRoomKey.value = generateRoomKeyCandidate();
-  setStatus(elements.createRoomStatus, "");
+  if (elements.createRoomStatus) {
+    setStatus(elements.createRoomStatus, "");
+  }
   window.setTimeout(() => {
     elements.createRoomName.focus();
   }, 0);
@@ -734,9 +746,15 @@ function openCreateRoomPanel() {
 
 function closeCreateRoomPanel(options = {}) {
   const { preserveStatus = false } = options;
+  if (!elements.createRoomPanel) {
+    return;
+  }
+
   elements.createRoomPanel.hidden = true;
-  elements.createRoomForm.reset();
-  if (!preserveStatus) {
+  if (elements.createRoomForm) {
+    elements.createRoomForm.reset();
+  }
+  if (!preserveStatus && elements.createRoomStatus) {
     setStatus(elements.createRoomStatus, "");
   }
 }
