@@ -1,17 +1,25 @@
 import { APP_CONFIG } from "./config.js";
 import {
+  broadcastRoomEvent,
+  castGroupDeleteVote,
   createGroupForMember,
   createExpense,
   deleteExpense,
   fetchExpenses,
+  fetchGroupDeleteVoteStatus,
   fetchGroupMembers,
   fetchGroupsForMember,
   fetchSettlements,
   joinGroupByRoomKey,
+  leaveGroup,
   loginMember,
-  signUpMember
+  signUpMember,
+  subscribeToRoomEvents,
+  unsubscribeFromRoomEvents
 } from "./supabase-client.js";
 import { CashSelector } from "./cash-selector.js";
+import { InviteSidePanel } from "./invite-side-panel.js";
+import { clearJoinRoute, getJoinRouteRoomId, normalizeInviteData } from "./room-invite-api.js";
 
 const state = {
   currentMember: null,
@@ -23,12 +31,24 @@ const state = {
   balances: [],
   debtRows: [],
   summary: null,
-  amountEntries: []
+  amountEntries: [],
+  deleteVote: null,
+  activeInvite: null,
+  pendingJoinRoomId: "",
+  pendingJoinInFlight: false
+};
+
+const realtimeState = {
+  channel: null,
+  subscribedGroupId: null,
+  tabId: createTabId(),
+  refreshInFlight: false
 };
 
 const elements = {
   authPanel: document.querySelector("#auth-panel"),
   workspacePanel: document.querySelector("#workspace-panel"),
+  workspaceSkeleton: document.querySelector("#workspace-skeleton"),
   authStatus: document.querySelector("#auth-status"),
   expenseStatus: document.querySelector("#expense-status"),
   amountBuilderStatus: document.querySelector("#amount-builder-status"),
@@ -41,7 +61,6 @@ const elements = {
   createRoomToggle: document.querySelector("#create-room-toggle"),
   createRoomCancel: document.querySelector("#create-room-cancel"),
   createRoomName: document.querySelector("#create-room-name"),
-  createRoomKey: document.querySelector("#create-room-key"),
   createRoomStatus: document.querySelector("#create-room-status"),
   joinRoomForm: document.querySelector("#join-room-form"),
   welcomeTitle: document.querySelector("#welcome-title"),
@@ -65,23 +84,46 @@ const elements = {
   expenseHistory: document.querySelector("#expense-history"),
   splitMode: document.querySelector("#split-mode"),
   logoutButton: document.querySelector("#logout-button"),
+  exitRoomButton: document.querySelector("#exit-room-button"),
+  deleteRoomButton: document.querySelector("#delete-room-button"),
+  deleteVoteStatus: document.querySelector("#delete-vote-status"),
   tabButtons: document.querySelectorAll(".tabs__button"),
   tabPanels: document.querySelectorAll(".tab-panel"),
   memberDrawer: document.querySelector("#member-drawer"),
   memberDrawerToggle: document.querySelector("#member-drawer-toggle"),
+  memberDrawerClose: document.querySelector("#member-drawer-close"),
+  memberDrawerScrim: document.querySelector("#member-drawer-scrim"),
   expenseAmountInput: document.querySelector("#expense-amount"),
   amountBuilderBody: document.querySelector("#amount-builder-body"),
   amountBuilderTotal: document.querySelector("#amount-builder-total"),
   amountBuilderClear: document.querySelector("#amount-builder-clear"),
   amountBuilderConfirm: document.querySelector("#amount-builder-confirm"),
-  cashSelectorRoot: document.querySelector("#cash-selector-root")
+  cashSelectorRoot: document.querySelector("#cash-selector-root"),
+  deleteVoteModal: document.querySelector("#delete-vote-modal"),
+  deleteVoteBackdrop: document.querySelector("#delete-vote-backdrop"),
+  deleteVoteClose: document.querySelector("#delete-vote-close"),
+  deleteVoteConfirm: document.querySelector("#delete-vote-confirm"),
+  deleteVoteMembers: document.querySelector("#delete-vote-members"),
+  deleteVoteModalStatus: document.querySelector("#delete-vote-modal-status"),
+  inviteSidePanelRoot: document.querySelector("#invite-side-panel-root"),
+  joinRouteLoader: document.querySelector("#join-route-loader"),
+  joinRouteLoaderText: document.querySelector("#join-route-loader-text")
 };
 
 new CashSelector(elements.cashSelectorRoot);
+const invitePanel = new InviteSidePanel(elements.inviteSidePanelRoot, {
+  onCopyCode: (invite) => copyInviteText(invite?.roomId || "", "Room code copied."),
+  onCopyLink: (invite) => copyInviteText(invite?.inviteUrl || "", "Invite link copied."),
+  onDownload: (invite, generator) => {
+    generator.download(`${(invite?.roomId || "room-invite").toLowerCase()}-qr.png`);
+  }
+});
 
 function init() {
+  state.pendingJoinRoomId = getJoinRouteRoomId();
   bindEvents();
   setDefaultDate();
+  primeJoinRouteStatus();
   restoreSession();
 }
 
@@ -103,9 +145,20 @@ function bindEvents() {
   elements.splitMode.addEventListener("change", renderCustomShareInputs);
   elements.logoutButton.addEventListener("click", handleLogout);
   elements.memberDrawerToggle.addEventListener("click", toggleMemberDrawer);
+  if (elements.memberDrawerClose) {
+    elements.memberDrawerClose.addEventListener("click", closeMemberDrawer);
+  }
+  if (elements.memberDrawerScrim) {
+    elements.memberDrawerScrim.addEventListener("click", closeMemberDrawer);
+  }
   elements.cashSelectorRoot.addEventListener("cashValueSelected", handleCashValueSelected);
   elements.amountBuilderClear.addEventListener("click", handleClearAmountBuilder);
   elements.amountBuilderConfirm.addEventListener("click", handleConfirmAmountBuilder);
+  elements.exitRoomButton.addEventListener("click", handleExitRoom);
+  elements.deleteRoomButton.addEventListener("click", openDeleteVoteModal);
+  elements.deleteVoteClose.addEventListener("click", closeDeleteVoteModal);
+  elements.deleteVoteBackdrop.addEventListener("click", closeDeleteVoteModal);
+  elements.deleteVoteConfirm.addEventListener("click", handleCastDeleteVote);
 
   elements.tabButtons.forEach((button) => {
     button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
@@ -221,12 +274,17 @@ async function bootstrapWorkspace() {
   elements.drawerTitle.textContent = `${state.currentMember.display_name}'s spend story`;
 
   try {
+    setWorkspaceLoading(true);
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
     if (!state.availableGroups.length) {
       state.activeGroupId = null;
+      state.deleteVote = null;
+      await syncRoomRealtimeSubscription();
       renderGroups();
       renderEmptyWorkspace("You are not part of any rooms yet. Create a room or join one with a room ID.");
+      await maybeAutoJoinPendingRoom();
       saveSession();
+      setWorkspaceLoading(false);
       return;
     }
 
@@ -236,9 +294,12 @@ async function bootstrapWorkspace() {
 
     renderGroups();
     await loadActiveGroupData();
+    await maybeAutoJoinPendingRoom();
     saveSession();
   } catch (error) {
     setStatus(elements.authStatus, error.message || "Unable to load workspace.");
+  } finally {
+    setWorkspaceLoading(false);
   }
 }
 
@@ -258,10 +319,10 @@ async function handleCreateRoom(event) {
 
   const formData = new FormData(event.currentTarget);
   const roomName = String(formData.get("roomName") || "").trim();
-  const roomKey = String(formData.get("roomKey") || "").trim().toUpperCase();
+  const roomKey = "";
 
-  if (!roomName || !roomKey) {
-    setStatus(elements.createRoomStatus, "Enter a room name and room ID.");
+  if (!roomName) {
+    setStatus(elements.createRoomStatus, "Enter a room name.");
     return;
   }
 
@@ -275,13 +336,15 @@ async function handleCreateRoom(event) {
     });
 
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
-    state.activeGroupId = created.group_id;
+    state.activeGroupId = created.id;
+    state.activeInvite = normalizeInviteData(created);
     resetAmountBuilder(true);
     renderGroups();
     closeCreateRoomPanel();
     await loadActiveGroupData();
     saveSession();
-    setStatus(elements.expenseStatus, `Created ${created.group_name}. Room ID: ${created.room_key}.`);
+    await renderInvitePanel();
+    setStatus(elements.expenseStatus, `Created ${created.name}. Room ID: ${created.roomId || created.room_key}.`);
   } catch (error) {
     setStatus(elements.createRoomStatus, error.message || "Could not create room.");
   }
@@ -305,14 +368,15 @@ async function handleJoinRoom(event) {
   try {
     const joined = await joinGroupByRoomKey(state.currentMember.session_token, roomKey);
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
-    state.activeGroupId = joined.group_id;
+    state.activeGroupId = joined.id;
     resetAmountBuilder(true);
     closeCreateRoomPanel();
     renderGroups();
     await loadActiveGroupData();
     form.reset();
     saveSession();
-    setStatus(elements.expenseStatus, `Success! Joined ${joined.group_name}.`);
+    await notifyRoomChange(joined.id, "member_joined");
+    setStatus(elements.expenseStatus, `Success! Joined ${joined.name}.`);
   } catch (error) {
     setStatus(elements.expenseStatus, error.message || "Could not join room.");
   }
@@ -320,17 +384,22 @@ async function handleJoinRoom(event) {
 
 async function loadActiveGroupData() {
   if (!state.activeGroupId) {
+    await syncRoomRealtimeSubscription();
+    state.deleteVote = null;
     renderEmptyWorkspace("Select a room to continue.");
     return;
   }
 
+  await syncRoomRealtimeSubscription();
+  setWorkspaceLoading(true);
   setStatus(elements.expenseStatus, "Loading room balances, expenses, and payments...");
 
   try {
-    const [members, expenses, settlements] = await Promise.all([
+    const [members, expenses, settlements, deleteVote] = await Promise.all([
       fetchGroupMembers(state.currentMember.session_token, state.activeGroupId),
       fetchExpenses(state.currentMember.session_token, state.activeGroupId),
-      fetchSettlements(state.currentMember.session_token, state.activeGroupId)
+      fetchSettlements(state.currentMember.session_token, state.activeGroupId),
+      fetchGroupDeleteVoteStatus(state.currentMember.session_token, state.activeGroupId)
     ]);
 
     state.groupMembers = members;
@@ -339,11 +408,14 @@ async function loadActiveGroupData() {
     state.balances = computeBalances(expenses, settlements, members, state.currentMember.id);
     state.debtRows = computeOutstandingDebtRows(expenses, settlements, state.currentMember.id);
     state.summary = computeSummary(expenses, state.balances, state.currentMember.id);
+    state.deleteVote = deleteVote;
 
     renderWorkspace();
     setStatus(elements.expenseStatus, "");
   } catch (error) {
     renderEmptyWorkspace(error.message || "Unable to load room data.");
+  } finally {
+    setWorkspaceLoading(false);
   }
 }
 
@@ -366,11 +438,13 @@ function renderGroups() {
 function renderWorkspace() {
   renderSummary();
   renderDrawer();
+  renderDeleteVoteModal();
   renderDebtTable();
   renderBalancesTable();
   renderExpenseFormMembers();
   renderExpenseHistory();
   renderAmountBuilder();
+  void renderInvitePanel();
 }
 
 function renderDrawer() {
@@ -386,6 +460,9 @@ function renderDrawer() {
   elements.activeRoomChip.textContent = activeGroup
     ? `${activeGroup.name} | ${roomKey}`
     : "No room selected";
+  elements.exitRoomButton.disabled = !activeGroup;
+  elements.deleteRoomButton.disabled = !activeGroup;
+  elements.deleteVoteStatus.textContent = formatDeleteVoteStatus();
 
   const funEquivalents = state.summary?.fun_equivalents || [];
   if (!funEquivalents.length) {
@@ -404,6 +481,8 @@ function renderDrawer() {
 }
 
 function renderEmptyWorkspace(message) {
+  state.deleteVote = null;
+  state.activeInvite = state.activeGroupId ? state.activeInvite : null;
   elements.owedToYou.textContent = formatCurrency(0);
   elements.youOwe.textContent = formatCurrency(0);
   elements.netBalance.textContent = formatCurrency(0);
@@ -418,9 +497,13 @@ function renderEmptyWorkspace(message) {
   elements.drawerRoomName.textContent = message;
   elements.activeRoomChip.textContent = "No room selected";
   elements.activeRoomIdDisplay.textContent = "Room ID: --------";
+  elements.deleteVoteStatus.textContent = "No delete vote is active.";
+  closeDeleteVoteModal();
   closeCreateRoomPanel({ preserveStatus: true });
+  closeMemberDrawer();
   resetAmountBuilder(true);
   renderAmountBuilder(message);
+  invitePanel.hide();
 }
 
 function renderSummary() {
@@ -681,6 +764,7 @@ async function handleCreateExpense(event) {
     resetAmountBuilder(false);
     renderExpenseFormMembers();
     await loadActiveGroupData();
+    await notifyRoomChange(state.activeGroupId, "expense_created");
     setStatus(elements.expenseStatus, "Expense saved.");
   } catch (error) {
     setStatus(elements.expenseStatus, error.message || "Could not save expense.");
@@ -692,6 +776,7 @@ async function handleDeleteExpense(expenseId) {
     setStatus(elements.expenseStatus, "Removing expense...");
     await deleteExpense(state.currentMember.session_token, expenseId);
     await loadActiveGroupData();
+    await notifyRoomChange(state.activeGroupId, "expense_deleted", { expenseId });
     setStatus(elements.expenseStatus, "Expense deleted.");
   } catch (error) {
     setStatus(elements.expenseStatus, error.message || "Could not delete expense.");
@@ -727,10 +812,16 @@ function handleLogout() {
   state.debtRows = [];
   state.summary = null;
   state.amountEntries = [];
+  state.deleteVote = null;
+  state.activeInvite = null;
+  state.pendingJoinRoomId = "";
+  void syncRoomRealtimeSubscription(null);
   clearSession();
   closeCreateRoomPanel({ preserveStatus: false });
-  elements.memberDrawer.classList.remove("is-open");
-  elements.memberDrawerToggle.setAttribute("aria-expanded", "false");
+  closeDeleteVoteModal();
+  closeMemberDrawer();
+  hideJoinRouteLoader();
+  invitePanel.hide();
   elements.authPanel.hidden = false;
   elements.workspacePanel.hidden = true;
   renderAmountBuilder("Log in and open a room to build an amount.");
@@ -739,13 +830,12 @@ function handleLogout() {
 }
 
 function openCreateRoomPanel() {
-  if (!elements.createRoomPanel || !elements.createRoomName || !elements.createRoomKey) {
+  if (!elements.createRoomPanel || !elements.createRoomName) {
     return;
   }
 
   elements.createRoomPanel.hidden = false;
   elements.createRoomName.value = "";
-  elements.createRoomKey.value = generateRoomKeyCandidate();
   if (elements.createRoomStatus) {
     setStatus(elements.createRoomStatus, "");
   }
@@ -813,6 +903,13 @@ function toggleMemberDrawer() {
 
   const isOpen = elements.memberDrawer.classList.toggle("is-open");
   elements.memberDrawerToggle.setAttribute("aria-expanded", String(isOpen));
+  document.body.classList.toggle("is-drawer-open", isOpen);
+}
+
+function closeMemberDrawer() {
+  elements.memberDrawer.classList.remove("is-open");
+  elements.memberDrawerToggle.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("is-drawer-open");
 }
 
 function computeBalances(expenses, settlements, members, currentMemberId) {
@@ -971,7 +1068,248 @@ function getActiveGroup() {
 }
 
 function getGroupRoomKey(group) {
-  return group?.room_key || group?.id || "--------";
+  return group?.room_key || "--------";
+}
+
+async function syncRoomRealtimeSubscription(targetGroupId = state.activeGroupId) {
+  if (realtimeState.subscribedGroupId === targetGroupId) {
+    return;
+  }
+
+  if (realtimeState.channel) {
+    await unsubscribeFromRoomEvents(realtimeState.channel);
+    realtimeState.channel = null;
+    realtimeState.subscribedGroupId = null;
+  }
+
+  if (!state.currentMember || !targetGroupId) {
+    return;
+  }
+
+  realtimeState.channel = subscribeToRoomEvents(targetGroupId, handleRoomRealtimeEvent);
+  realtimeState.subscribedGroupId = targetGroupId;
+}
+
+function handleRoomRealtimeEvent(payload) {
+  if (!payload || realtimeState.refreshInFlight || payload.senderTabId === realtimeState.tabId) {
+    return;
+  }
+
+  if (String(payload.groupId) !== String(state.activeGroupId)) {
+    return;
+  }
+
+  void refreshWorkspaceFromRealtime(payload);
+}
+
+async function notifyRoomChange(groupId, type, payload = {}) {
+  if (!groupId) {
+    return;
+  }
+
+  await broadcastRoomEvent(groupId, type, {
+    ...payload,
+    senderTabId: realtimeState.tabId,
+    sentAt: new Date().toISOString()
+  });
+}
+
+async function refreshWorkspaceFromRealtime(payload) {
+  realtimeState.refreshInFlight = true;
+  setWorkspaceLoading(true);
+
+  try {
+    if (payload.type === "room_deleted" || payload.type === "member_left") {
+      state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+      state.activeGroupId = state.availableGroups.some((group) => String(group.id) === String(state.activeGroupId))
+        ? state.activeGroupId
+        : state.availableGroups[0]?.id || null;
+      renderGroups();
+      await loadActiveGroupData();
+      saveSession();
+      return;
+    }
+
+    await loadActiveGroupData();
+  } finally {
+    realtimeState.refreshInFlight = false;
+    setWorkspaceLoading(false);
+  }
+}
+
+function setWorkspaceLoading(isLoading) {
+  elements.workspacePanel.classList.toggle("is-loading", isLoading);
+  elements.workspaceSkeleton.hidden = !isLoading;
+}
+
+function primeJoinRouteStatus() {
+  if (state.pendingJoinRoomId && !state.currentMember) {
+    setStatus(elements.authStatus, `Log in or sign up to join room ${state.pendingJoinRoomId}.`);
+  }
+}
+
+async function maybeAutoJoinPendingRoom() {
+  if (!state.pendingJoinRoomId || !state.currentMember || state.pendingJoinInFlight) {
+    return;
+  }
+
+  state.pendingJoinInFlight = true;
+  showJoinRouteLoader(`Joining room ${state.pendingJoinRoomId}...`);
+
+  try {
+    const joined = await joinGroupByRoomKey(state.currentMember.session_token, state.pendingJoinRoomId);
+    state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+    state.activeGroupId = joined.id;
+    renderGroups();
+    await loadActiveGroupData();
+    clearJoinRoute();
+    state.pendingJoinRoomId = "";
+    saveSession();
+    setStatus(elements.expenseStatus, `Joined ${joined.name}.`);
+  } catch (error) {
+    setStatus(elements.authStatus, error.message || "Unable to join room from invite.");
+    clearJoinRoute();
+    state.pendingJoinRoomId = "";
+  } finally {
+    state.pendingJoinInFlight = false;
+    hideJoinRouteLoader();
+  }
+}
+
+function showJoinRouteLoader(message) {
+  elements.joinRouteLoader.hidden = false;
+  elements.joinRouteLoaderText.textContent = message;
+}
+
+function hideJoinRouteLoader() {
+  elements.joinRouteLoader.hidden = true;
+  elements.joinRouteLoaderText.textContent = "Joining room...";
+}
+
+async function renderInvitePanel() {
+  if (!state.activeInvite || String(state.activeInvite.groupId) !== String(state.activeGroupId)) {
+    invitePanel.hide();
+    return;
+  }
+
+  await invitePanel.setInvite(state.activeInvite);
+}
+
+async function copyInviteText(value, successMessage) {
+  if (!value) {
+    return;
+  }
+
+  await navigator.clipboard.writeText(value);
+  setStatus(elements.expenseStatus, successMessage);
+}
+
+function formatDeleteVoteStatus() {
+  if (!state.deleteVote || !state.deleteVote.active_member_count) {
+    return "No delete vote is active.";
+  }
+
+  if (state.deleteVote.deleted) {
+    return "This room has been deleted.";
+  }
+
+  return `${state.deleteVote.approval_count}/${state.deleteVote.active_member_count} members approved deleting this room.`;
+}
+
+function renderDeleteVoteModal() {
+  if (elements.deleteVoteModal.hidden || !state.deleteVote) {
+    return;
+  }
+
+  elements.deleteVoteMembers.innerHTML = state.deleteVote.members
+    .map((member) => `
+      <div class="vote-status-item">
+        <span>${escapeHtml(member.display_name)}</span>
+        <span class="vote-status-item__state ${member.approved ? "is-approved" : "is-pending"}">
+          ${member.approved ? "Approved" : "Pending"}
+        </span>
+      </div>
+    `)
+    .join("");
+
+  const currentMemberVote = state.deleteVote.members.find((member) => String(member.member_id) === String(state.currentMember?.id));
+  elements.deleteVoteConfirm.disabled = Boolean(currentMemberVote?.approved) || state.deleteVote.deleted;
+  setStatus(elements.deleteVoteModalStatus, state.deleteVote.deleted
+    ? "Room deleted."
+    : formatDeleteVoteStatus());
+}
+
+function openDeleteVoteModal() {
+  if (!state.activeGroupId) {
+    return;
+  }
+
+  elements.deleteVoteModal.hidden = false;
+  renderDeleteVoteModal();
+}
+
+function closeDeleteVoteModal() {
+  elements.deleteVoteModal.hidden = true;
+  setStatus(elements.deleteVoteModalStatus, "");
+}
+
+async function handleCastDeleteVote() {
+  if (!state.currentMember || !state.activeGroupId) {
+    return;
+  }
+
+  try {
+    setStatus(elements.deleteVoteModalStatus, "Recording your vote...");
+    const result = await castGroupDeleteVote(state.currentMember.session_token, state.activeGroupId);
+    state.deleteVote = result;
+    renderDrawer();
+    renderDeleteVoteModal();
+
+    const eventType = result.deleted ? "room_deleted" : "delete_vote_updated";
+    await notifyRoomChange(state.activeGroupId, eventType);
+
+    if (result.deleted) {
+      closeDeleteVoteModal();
+      state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+      state.activeGroupId = state.availableGroups[0]?.id || null;
+      renderGroups();
+      await loadActiveGroupData();
+    }
+  } catch (error) {
+    setStatus(elements.deleteVoteModalStatus, error.message || "Could not record delete vote.");
+  }
+}
+
+async function handleExitRoom() {
+  if (!state.currentMember || !state.activeGroupId) {
+    return;
+  }
+
+  const leavingGroupId = state.activeGroupId;
+
+  try {
+    setStatus(elements.expenseStatus, "Exiting room...");
+    const result = await leaveGroup(state.currentMember.session_token, leavingGroupId);
+    closeDeleteVoteModal();
+    closeMemberDrawer();
+    state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+    state.activeGroupId = state.availableGroups[0]?.id || null;
+    renderGroups();
+    await loadActiveGroupData();
+    saveSession();
+    await notifyRoomChange(leavingGroupId, result.deleted ? "room_deleted" : "member_left");
+    setStatus(elements.expenseStatus, result.deleted ? "You left and the empty room was deleted." : "You exited the room.");
+  } catch (error) {
+    setStatus(elements.expenseStatus, error.message || "Could not exit room.");
+  }
+}
+
+function createTabId() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function formatDirection(direction) {

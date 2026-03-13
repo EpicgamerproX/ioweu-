@@ -50,6 +50,13 @@ create table if not exists public.group_members (
   primary key (group_id, member_id)
 );
 
+create table if not exists public.group_delete_votes (
+  group_id uuid not null references public.groups(id) on delete cascade,
+  member_id uuid not null references public.members(id) on delete cascade,
+  approved_at timestamptz not null default timezone('utc', now()),
+  primary key (group_id, member_id)
+);
+
 create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   group_id uuid not null references public.groups(id) on delete cascade,
@@ -90,6 +97,7 @@ alter table public.group_members enable row level security;
 alter table public.expenses enable row level security;
 alter table public.expense_shares enable row level security;
 alter table public.settlement_payments enable row level security;
+alter table public.group_delete_votes enable row level security;
 
 drop policy if exists no_direct_access_members on public.members;
 create policy no_direct_access_members on public.members for all using (false) with check (false);
@@ -111,6 +119,9 @@ create policy no_direct_access_expense_shares on public.expense_shares for all u
 
 drop policy if exists no_direct_access_settlement_payments on public.settlement_payments;
 create policy no_direct_access_settlement_payments on public.settlement_payments for all using (false) with check (false);
+
+drop policy if exists no_direct_access_group_delete_votes on public.group_delete_votes;
+create policy no_direct_access_group_delete_votes on public.group_delete_votes for all using (false) with check (false);
 
 create or replace function public.normalize_email(input_email text)
 returns text
@@ -386,6 +397,7 @@ create or replace function public.create_group_for_member(
   session_token_input uuid,
   new_group_name text,
   room_key_input text,
+  app_base_url_input text default null,
   preferred_currency text default null
 )
 returns jsonb
@@ -398,19 +410,11 @@ declare
   new_group_id uuid;
   resolved_room_key text;
   resolved_currency text;
+  resolved_base_url text;
 begin
   current_member_id := public.require_valid_session(session_token_input);
-  resolved_room_key := upper(trim(coalesce(room_key_input, '')));
-
-  if resolved_room_key = '' then
-    resolved_room_key := public.generate_room_key();
-  elsif exists (
-    select 1
-    from public.groups
-    where room_key = resolved_room_key
-  ) then
-    raise exception 'Room ID already exists';
-  end if;
+  resolved_room_key := public.generate_room_key();
+  resolved_base_url := trim(coalesce(app_base_url_input, ''));
 
   resolved_currency := upper(coalesce(
     nullif(trim(preferred_currency), ''),
@@ -437,7 +441,13 @@ begin
     'group_id', new_group_id,
     'group_name', trim(new_group_name),
     'room_key', resolved_room_key,
-    'currency_code', resolved_currency
+    'currency_code', resolved_currency,
+    'roomId', resolved_room_key,
+    'inviteUrl',
+      case
+        when resolved_base_url = '' then '/join/' || resolved_room_key
+        else rtrim(resolved_base_url, '/') || '/join/' || resolved_room_key
+      end
   );
 end;
 $$;
@@ -804,5 +814,170 @@ begin
   where id = expense_id_input;
 
   return jsonb_build_object('deleted', true);
+end;
+$$;
+
+create or replace function public.get_group_delete_vote_status(session_token_input uuid, group_id_input uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_member_id uuid;
+  active_member_count integer;
+  approval_count integer;
+begin
+  current_member_id := public.require_valid_session(session_token_input);
+  perform public.require_group_membership(group_id_input, current_member_id);
+
+  select count(*)
+  into active_member_count
+  from public.group_members
+  where group_id = group_id_input
+    and is_active = true;
+
+  select count(*)
+  into approval_count
+  from public.group_delete_votes gdv
+  join public.group_members gm
+    on gm.group_id = gdv.group_id
+   and gm.member_id = gdv.member_id
+  where gdv.group_id = group_id_input
+    and gm.is_active = true;
+
+  return jsonb_build_object(
+    'group_id', group_id_input,
+    'deleted', false,
+    'active_member_count', active_member_count,
+    'approval_count', approval_count,
+    'all_approved', active_member_count > 0 and approval_count = active_member_count,
+    'members', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'member_id', m.id,
+          'display_name', m.display_name,
+          'approved', gdv.member_id is not null
+        )
+        order by gm.joined_at asc
+      )
+      from public.group_members gm
+      join public.members m on m.id = gm.member_id
+      left join public.group_delete_votes gdv
+        on gdv.group_id = gm.group_id
+       and gdv.member_id = gm.member_id
+      where gm.group_id = group_id_input
+        and gm.is_active = true
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+create or replace function public.leave_group(session_token_input uuid, group_id_input uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_member_id uuid;
+  active_member_count integer;
+begin
+  current_member_id := public.require_valid_session(session_token_input);
+  perform public.require_group_membership(group_id_input, current_member_id);
+
+  update public.group_members
+  set is_active = false
+  where group_id = group_id_input
+    and member_id = current_member_id;
+
+  delete from public.group_delete_votes
+  where group_id = group_id_input
+    and member_id = current_member_id;
+
+  select count(*)
+  into active_member_count
+  from public.group_members
+  where group_id = group_id_input
+    and is_active = true;
+
+  if active_member_count = 0 then
+    delete from public.groups
+    where id = group_id_input;
+
+    return jsonb_build_object('deleted', true);
+  end if;
+
+  if exists (
+    select 1
+    from public.group_members gm
+    where gm.group_id = group_id_input
+      and gm.is_active = true
+      and not exists (
+        select 1
+        from public.group_delete_votes gdv
+        where gdv.group_id = gm.group_id
+          and gdv.member_id = gm.member_id
+      )
+  ) then
+    return jsonb_build_object('deleted', false);
+  end if;
+
+  delete from public.groups
+  where id = group_id_input;
+
+  return jsonb_build_object('deleted', true);
+end;
+$$;
+
+create or replace function public.cast_group_delete_vote(session_token_input uuid, group_id_input uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_member_id uuid;
+  active_member_count integer;
+  approval_count integer;
+begin
+  current_member_id := public.require_valid_session(session_token_input);
+  perform public.require_group_membership(group_id_input, current_member_id);
+
+  insert into public.group_delete_votes (group_id, member_id)
+  values (group_id_input, current_member_id)
+  on conflict (group_id, member_id)
+  do update set approved_at = excluded.approved_at;
+
+  select count(*)
+  into active_member_count
+  from public.group_members
+  where group_id = group_id_input
+    and is_active = true;
+
+  select count(*)
+  into approval_count
+  from public.group_delete_votes gdv
+  join public.group_members gm
+    on gm.group_id = gdv.group_id
+   and gm.member_id = gdv.member_id
+  where gdv.group_id = group_id_input
+    and gm.is_active = true;
+
+  if active_member_count > 0 and approval_count = active_member_count then
+    delete from public.groups
+    where id = group_id_input;
+
+    return jsonb_build_object(
+      'group_id', group_id_input,
+      'deleted', true,
+      'active_member_count', active_member_count,
+      'approval_count', approval_count,
+      'all_approved', true,
+      'members', '[]'::jsonb
+    );
+  end if;
+
+  return public.get_group_delete_vote_status(session_token_input, group_id_input);
 end;
 $$;

@@ -4,6 +4,7 @@ export const APP_CONFIG = {
   appName: env.APP_NAME || "Group Expense Tracker",
   supabaseUrl: env.SUPABASE_URL || "",
   supabaseAnonKey: env.SUPABASE_ANON_KEY || "",
+  appBaseUrl: env.APP_BASE_URL || window.location.origin,
   defaultCurrency: env.DEFAULT_CURRENCY || "INR",
   sessionStorageKey: "expense-tracker-session",
   comparisonItems: [

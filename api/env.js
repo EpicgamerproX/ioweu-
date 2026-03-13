@@ -3,7 +3,8 @@ module.exports = (req, res) => {
     SUPABASE_URL: process.env.SUPABASE_URL || "",
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || "",
     DEFAULT_CURRENCY: process.env.DEFAULT_CURRENCY || "INR",
-    APP_NAME: process.env.APP_NAME || "Group Expense Tracker"
+    APP_NAME: process.env.APP_NAME || "Group Expense Tracker",
+    APP_BASE_URL: process.env.APP_BASE_URL || ""
   };
 
   res.setHeader("Content-Type", "application/javascript; charset=utf-8");

@@ -11,6 +11,8 @@ export const supabase = createClient(APP_CONFIG.supabaseUrl, APP_CONFIG.supabase
   }
 });
 
+const ROOM_EVENT_NAME = "room_event";
+
 async function unwrapSingle(query, fallbackMessage) {
   const { data, error } = await query;
   if (error) {
@@ -34,8 +36,44 @@ function normalizeGroup(group) {
     id: group.group_id || group.id || group.default_group_id || null,
     name: group.group_name || group.name || "Unnamed room",
     room_key: group.room_key || group.roomKey || group.default_room_key || "",
-    currency_code: group.currency_code || group.currencyCode || APP_CONFIG.defaultCurrency
+    currency_code: group.currency_code || group.currencyCode || APP_CONFIG.defaultCurrency,
+    roomId: group.roomId || group.room_id || group.room_key || group.roomKey || "",
+    inviteUrl: group.inviteUrl || group.invite_url || ""
   };
+}
+
+function normalizeDeleteVoteStatus(status) {
+  return {
+    group_id: status?.group_id || null,
+    deleted: Boolean(status?.deleted),
+    active_member_count: Number(status?.active_member_count || 0),
+    approval_count: Number(status?.approval_count || 0),
+    all_approved: Boolean(status?.all_approved),
+    members: (status?.members || []).map((member) => ({
+      member_id: member.member_id,
+      display_name: member.display_name || "Unknown",
+      approved: Boolean(member.approved)
+    }))
+  };
+}
+
+function getRoomChannelName(groupId) {
+  return `room:${groupId}`;
+}
+
+function waitForChannelSubscribed(channel) {
+  return new Promise((resolve, reject) => {
+    channel.subscribe((status, error) => {
+      if (status === "SUBSCRIBED") {
+        resolve();
+        return;
+      }
+
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || error) {
+        reject(error || new Error("Unable to subscribe to realtime room channel."));
+      }
+    });
+  });
 }
 
 export async function loginMember(email, password) {
@@ -78,6 +116,7 @@ export async function createGroupForMember(sessionToken, { roomName, roomKey, cu
       session_token_input: sessionToken,
       new_group_name: roomName.trim(),
       room_key_input: roomKey.trim().toUpperCase(),
+      app_base_url_input: APP_CONFIG.appBaseUrl,
       preferred_currency: (currency || "").trim().toUpperCase()
     }),
     "Unable to create room."
@@ -204,4 +243,90 @@ export async function deleteExpense(sessionToken, expenseId) {
     }),
     "Unable to delete expense."
   );
+}
+
+export async function leaveGroup(sessionToken, groupId) {
+  return unwrapSingle(
+    supabase.rpc("leave_group", {
+      session_token_input: sessionToken,
+      group_id_input: groupId
+    }),
+    "Unable to exit room."
+  );
+}
+
+export async function fetchGroupDeleteVoteStatus(sessionToken, groupId) {
+  const data = await unwrapSingle(
+    supabase.rpc("get_group_delete_vote_status", {
+      session_token_input: sessionToken,
+      group_id_input: groupId
+    }),
+    "Unable to load delete vote."
+  );
+
+  return normalizeDeleteVoteStatus(data);
+}
+
+export async function castGroupDeleteVote(sessionToken, groupId) {
+  const data = await unwrapSingle(
+    supabase.rpc("cast_group_delete_vote", {
+      session_token_input: sessionToken,
+      group_id_input: groupId
+    }),
+    "Unable to record delete vote."
+  );
+
+  return normalizeDeleteVoteStatus(data);
+}
+
+export function subscribeToRoomEvents(groupId, onEvent) {
+  const channel = supabase
+    .channel(getRoomChannelName(groupId), {
+      config: {
+        broadcast: {
+          self: true
+        }
+      }
+    })
+    .on("broadcast", { event: ROOM_EVENT_NAME }, ({ payload }) => {
+      onEvent(payload);
+    });
+
+  void waitForChannelSubscribed(channel).catch((error) => {
+    console.error(error);
+  });
+  return channel;
+}
+
+export async function unsubscribeFromRoomEvents(channel) {
+  if (!channel) {
+    return;
+  }
+
+  await supabase.removeChannel(channel);
+}
+
+export async function broadcastRoomEvent(groupId, type, payload = {}) {
+  const channel = supabase.channel(getRoomChannelName(groupId), {
+    config: {
+      broadcast: {
+        self: true
+      }
+    }
+  });
+
+  try {
+    await waitForChannelSubscribed(channel);
+    await channel.send({
+      type: "broadcast",
+      event: ROOM_EVENT_NAME,
+      payload: {
+        ...payload,
+        groupId,
+        type
+      }
+    });
+  } finally {
+    await supabase.removeChannel(channel);
+  }
 }
