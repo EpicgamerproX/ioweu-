@@ -274,7 +274,7 @@ async function bootstrapWorkspace() {
   elements.drawerTitle.textContent = `${state.currentMember.display_name}'s spend story`;
 
   try {
-    setWorkspaceLoading(true);
+    setWorkspaceLoading(true, { skeleton: true });
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
     if (!state.availableGroups.length) {
       state.activeGroupId = null;
@@ -293,7 +293,7 @@ async function bootstrapWorkspace() {
       : state.availableGroups[0].id;
 
     renderGroups();
-    await loadActiveGroupData();
+    await loadActiveGroupData({ manageLoading: false });
     await maybeAutoJoinPendingRoom();
     saveSession();
   } catch (error) {
@@ -382,7 +382,12 @@ async function handleJoinRoom(event) {
   }
 }
 
-async function loadActiveGroupData() {
+async function loadActiveGroupData(options = {}) {
+  const {
+    showSkeleton = false,
+    manageLoading = true
+  } = options;
+
   if (!state.activeGroupId) {
     await syncRoomRealtimeSubscription();
     state.deleteVote = null;
@@ -391,7 +396,9 @@ async function loadActiveGroupData() {
   }
 
   await syncRoomRealtimeSubscription();
-  setWorkspaceLoading(true);
+  if (manageLoading) {
+    setWorkspaceLoading(true, { skeleton: showSkeleton });
+  }
   setStatus(elements.expenseStatus, "Loading room balances, expenses, and payments...");
 
   try {
@@ -415,7 +422,9 @@ async function loadActiveGroupData() {
   } catch (error) {
     renderEmptyWorkspace(error.message || "Unable to load room data.");
   } finally {
-    setWorkspaceLoading(false);
+    if (manageLoading) {
+      setWorkspaceLoading(false);
+    }
   }
 }
 
@@ -1116,7 +1125,7 @@ async function notifyRoomChange(groupId, type, payload = {}) {
 
 async function refreshWorkspaceFromRealtime(payload) {
   realtimeState.refreshInFlight = true;
-  setWorkspaceLoading(true);
+  setWorkspaceLoading(true, { skeleton: true });
 
   try {
     if (payload.type === "room_deleted" || payload.type === "member_left") {
@@ -1125,21 +1134,22 @@ async function refreshWorkspaceFromRealtime(payload) {
         ? state.activeGroupId
         : state.availableGroups[0]?.id || null;
       renderGroups();
-      await loadActiveGroupData();
+      await loadActiveGroupData({ manageLoading: false });
       saveSession();
       return;
     }
 
-    await loadActiveGroupData();
+    await loadActiveGroupData({ manageLoading: false });
   } finally {
     realtimeState.refreshInFlight = false;
     setWorkspaceLoading(false);
   }
 }
 
-function setWorkspaceLoading(isLoading) {
-  elements.workspacePanel.classList.toggle("is-loading", isLoading);
-  elements.workspaceSkeleton.hidden = !isLoading;
+function setWorkspaceLoading(isLoading, options = {}) {
+  const showSkeleton = Boolean(options.skeleton);
+  elements.workspacePanel.classList.toggle("is-loading", isLoading && showSkeleton);
+  elements.workspaceSkeleton.hidden = !(isLoading && showSkeleton);
 }
 
 function primeJoinRouteStatus() {

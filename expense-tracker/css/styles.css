@@ -154,6 +154,11 @@ select {
   pointer-events: none;
 }
 
+body.is-cash-selector-locked {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
 .panel__header--row,
 .group-strip,
 .section-heading,

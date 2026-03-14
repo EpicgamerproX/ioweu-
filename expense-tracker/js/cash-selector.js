@@ -99,6 +99,9 @@ export class CashSelector {
     this.state.activeButton = button;
 
     button.classList.add("is-pressed");
+    if (button.setPointerCapture) {
+      button.setPointerCapture(event.pointerId);
+    }
 
     this.state.holdTimer = window.setTimeout(() => {
       this.openWheel(button);
@@ -167,6 +170,7 @@ export class CashSelector {
     this.positionOverlayElements();
     this.elements.overlay.classList.add("is-visible");
     this.elements.wheel.classList.add("is-visible");
+    document.body.classList.add("is-cash-selector-locked");
 
     if (navigator.vibrate) {
       navigator.vibrate(18);
@@ -223,6 +227,14 @@ export class CashSelector {
   }
 
   setActiveSegment(index) {
+    if (this.state.activeSegmentIndex === index) {
+      return;
+    }
+
+    if (index >= 0 && navigator.vibrate) {
+      navigator.vibrate(12);
+    }
+
     this.state.activeSegmentIndex = index;
     this.elements.segments.forEach((segment, segmentIndex) => {
       segment.classList.toggle("is-active", segmentIndex === index);
@@ -249,6 +261,7 @@ export class CashSelector {
     window.removeEventListener("pointermove", this.handleGlobalPointerMove);
     window.removeEventListener("pointerup", this.handleGlobalPointerUp);
     window.removeEventListener("pointercancel", this.handleGlobalPointerUp);
+    document.body.classList.remove("is-cash-selector-locked");
 
     if (this.state.rafId) {
       window.cancelAnimationFrame(this.state.rafId);
@@ -256,6 +269,9 @@ export class CashSelector {
     }
 
     if (this.state.activeButton) {
+      if (this.state.pointerId != null && this.state.activeButton.hasPointerCapture?.(this.state.pointerId)) {
+        this.state.activeButton.releasePointerCapture(this.state.pointerId);
+      }
       this.state.activeButton.classList.remove("is-active-base", "is-pressed");
     }
 
@@ -275,6 +291,10 @@ export class CashSelector {
     if (this.state.holdTimer) {
       window.clearTimeout(this.state.holdTimer);
       this.state.holdTimer = null;
+    }
+
+    if (this.state.activeButton && this.state.pointerId != null && this.state.activeButton.hasPointerCapture?.(this.state.pointerId)) {
+      this.state.activeButton.releasePointerCapture(this.state.pointerId);
     }
 
     if (this.state.activeButton && !this.state.overlayOpen) {
