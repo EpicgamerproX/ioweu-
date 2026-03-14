@@ -30,11 +30,20 @@ export class CashSelector {
   }
 
   render() {
-    const buttonMarkup = BASE_VALUES.map((value) => `
+    const valueButtonMarkup = BASE_VALUES.map((value) => `
       <button class="cash-selector__button" type="button" data-base-value="${value}">
         ${value}
       </button>
     `).join("");
+
+    const utilityButtonMarkup = `
+      <button class="cash-selector__button cash-selector__button--utility cash-selector__button--clear" type="button" data-action="clear">
+        Clear
+      </button>
+      <button class="cash-selector__button cash-selector__button--utility cash-selector__button--confirm" type="button" data-action="confirm">
+        Confirm
+      </button>
+    `;
 
     const segmentMarkup = RADIAL_VALUES.map((value, index) => {
       const angle = -90 + index * (360 / RADIAL_VALUES.length);
@@ -56,7 +65,8 @@ export class CashSelector {
     this.root.innerHTML = `
       <div class="cash-selector">
         <div class="cash-selector__grid">
-          ${buttonMarkup}
+          ${valueButtonMarkup}
+          ${utilityButtonMarkup}
         </div>
         <div class="cash-selector__overlay">
           <div class="cash-selector__veil"></div>
@@ -71,7 +81,8 @@ export class CashSelector {
 
     this.elements = {
       container: this.root.querySelector(".cash-selector"),
-      buttons: Array.from(this.root.querySelectorAll(".cash-selector__button")),
+      buttons: Array.from(this.root.querySelectorAll(".cash-selector__button[data-base-value]")),
+      actionButtons: Array.from(this.root.querySelectorAll(".cash-selector__button[data-action]")),
       overlay: this.root.querySelector(".cash-selector__overlay"),
       focus: this.root.querySelector(".cash-selector__focus"),
       wheel: this.root.querySelector(".cash-selector__wheel"),
@@ -87,6 +98,10 @@ export class CashSelector {
       button.addEventListener("pointerup", (event) => this.handleButtonPointerUp(event, button));
       button.addEventListener("pointercancel", () => this.cancelHold());
       button.addEventListener("pointerleave", () => this.handleButtonPointerLeave());
+    });
+
+    this.elements.actionButtons.forEach((button) => {
+      button.addEventListener("click", () => this.emitAction(button.dataset.action || ""));
     });
   }
 
@@ -346,6 +361,17 @@ export class CashSelector {
         label,
         timestamp: new Date().toISOString()
       }
+    }));
+  }
+
+  emitAction(action) {
+    if (!action) {
+      return;
+    }
+
+    this.root.dispatchEvent(new CustomEvent("cashActionRequested", {
+      bubbles: true,
+      detail: { action }
     }));
   }
 }

@@ -151,6 +151,7 @@ function bindEvents() {
     elements.memberDrawerScrim.addEventListener("click", closeMemberDrawer);
   }
   elements.cashSelectorRoot.addEventListener("cashValueSelected", handleCashValueSelected);
+  elements.cashSelectorRoot.addEventListener("cashActionRequested", handleCashSelectorAction);
   elements.amountBuilderClear.addEventListener("click", handleClearAmountBuilder);
   elements.amountBuilderConfirm.addEventListener("click", handleConfirmAmountBuilder);
   elements.exitRoomButton.addEventListener("click", handleExitRoom);
@@ -801,6 +802,18 @@ function handleCashValueSelected(event) {
   setStatus(elements.amountBuilderStatus, `${event.detail.label} added to the running total.`);
 }
 
+function handleCashSelectorAction(event) {
+  const action = event.detail?.action;
+  if (action === "clear") {
+    handleClearAmountBuilder();
+    return;
+  }
+
+  if (action === "confirm") {
+    handleConfirmAmountBuilder();
+  }
+}
+
 function handleLogout() {
   state.currentMember = null;
   state.availableGroups = [];
@@ -896,10 +909,6 @@ function getAmountBuilderTotal() {
 }
 
 function toggleMemberDrawer() {
-  if (!isTapDrawerMode()) {
-    return;
-  }
-
   const isOpen = elements.memberDrawer.classList.toggle("is-open");
   elements.memberDrawerToggle.setAttribute("aria-expanded", String(isOpen));
   document.body.classList.toggle("is-drawer-open", isOpen);
@@ -1320,10 +1329,6 @@ function nearlyEqual(a, b) {
 
 function roundCurrency(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-function isTapDrawerMode() {
-  return window.matchMedia("(max-width: 980px), (hover: none)").matches;
 }
 
 function generateRoomKeyCandidate() {
