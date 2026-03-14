@@ -149,8 +149,9 @@ select {
   overflow: hidden;
 }
 
-.panel--workspace.is-loading > :not(.workspace-skeleton):not(.member-drawer) {
-  opacity: 0.28;
+.panel--workspace.is-loading > :not(.workspace-skeleton) {
+  opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
@@ -542,6 +543,7 @@ tbody tr:last-child td {
   display: grid;
   gap: 18px;
   z-index: 3;
+  pointer-events: none;
 }
 
 .skeleton-row {

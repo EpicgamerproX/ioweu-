@@ -38,11 +38,19 @@ const state = {
   pendingJoinInFlight: false
 };
 
+const UI_TIMINGS = {
+  realtimeSkeletonMs: 2500
+};
+
 const realtimeState = {
   channel: null,
   subscribedGroupId: null,
   tabId: createTabId(),
   refreshInFlight: false
+};
+
+const workspaceLoadingState = {
+  skeletonCount: 0
 };
 
 const elements = {
@@ -285,7 +293,7 @@ async function bootstrapWorkspace() {
       renderEmptyWorkspace("You are not part of any rooms yet. Create a room or join one with a room ID.");
       await maybeAutoJoinPendingRoom();
       saveSession();
-      setWorkspaceLoading(false);
+      setWorkspaceLoading(false, { skeleton: true });
       return;
     }
 
@@ -301,7 +309,7 @@ async function bootstrapWorkspace() {
     setStatus(elements.authStatus, error.message || "Unable to load workspace.");
   } finally {
     hideJoinRouteLoader();
-    setWorkspaceLoading(false);
+    setWorkspaceLoading(false, { skeleton: true });
   }
 }
 
@@ -425,7 +433,7 @@ async function loadActiveGroupData(options = {}) {
     renderEmptyWorkspace(error.message || "Unable to load room data.");
   } finally {
     if (manageLoading) {
-      setWorkspaceLoading(false);
+      setWorkspaceLoading(false, { skeleton: showSkeleton });
     }
   }
 }
@@ -1128,30 +1136,55 @@ async function notifyRoomChange(groupId, type, payload = {}) {
 async function refreshWorkspaceFromRealtime(payload) {
   realtimeState.refreshInFlight = true;
   setWorkspaceLoading(true, { skeleton: true });
+  const refreshMaskDelay = wait(UI_TIMINGS.realtimeSkeletonMs);
+  let refreshTask;
 
   try {
     if (payload.type === "room_deleted" || payload.type === "member_left") {
-      state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
-      state.activeGroupId = state.availableGroups.some((group) => String(group.id) === String(state.activeGroupId))
-        ? state.activeGroupId
-        : state.availableGroups[0]?.id || null;
-      renderGroups();
-      await loadActiveGroupData({ manageLoading: false });
-      saveSession();
-      return;
+      refreshTask = (async () => {
+        state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+        state.activeGroupId = state.availableGroups.some((group) => String(group.id) === String(state.activeGroupId))
+          ? state.activeGroupId
+          : state.availableGroups[0]?.id || null;
+        renderGroups();
+        await loadActiveGroupData({ manageLoading: false });
+        saveSession();
+      })();
+    } else {
+      refreshTask = loadActiveGroupData({ manageLoading: false });
     }
 
-    await loadActiveGroupData({ manageLoading: false });
+    void refreshTask.catch((error) => {
+      console.error(error);
+      setStatus(elements.expenseStatus, error.message || "Unable to refresh room data.");
+    });
   } finally {
+    await refreshMaskDelay;
     realtimeState.refreshInFlight = false;
-    setWorkspaceLoading(false);
+    setWorkspaceLoading(false, { skeleton: true });
   }
 }
 
 function setWorkspaceLoading(isLoading, options = {}) {
   const showSkeleton = Boolean(options.skeleton);
-  elements.workspacePanel.classList.toggle("is-loading", isLoading && showSkeleton);
-  elements.workspaceSkeleton.hidden = !(isLoading && showSkeleton);
+  if (!showSkeleton) {
+    return;
+  }
+
+  workspaceLoadingState.skeletonCount = Math.max(
+    0,
+    workspaceLoadingState.skeletonCount + (isLoading ? 1 : -1)
+  );
+
+  const shouldShowSkeleton = workspaceLoadingState.skeletonCount > 0;
+  elements.workspacePanel.classList.toggle("is-loading", shouldShowSkeleton);
+  elements.workspaceSkeleton.hidden = !shouldShowSkeleton;
+}
+
+function wait(durationMs) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, durationMs);
+  });
 }
 
 function primeJoinRouteStatus() {
