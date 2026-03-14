@@ -371,6 +371,34 @@
   </div>
 
   <div id="invite-side-panel-root"></div>
+  <div class="mobile-member-drawer" id="mobile-member-drawer" hidden>
+    <button class="mobile-member-drawer__scrim" id="mobile-member-drawer-scrim" type="button" aria-label="Close dashboard"></button>
+    <div class="mobile-member-drawer__panel" id="mobile-member-drawer-panel">
+      <div class="mobile-member-drawer__header">
+        <div>
+          <p class="panel__kicker">Dashboard</p>
+          <h3 id="mobile-drawer-title">Your spend story</h3>
+          <p class="drawer-room" id="mobile-drawer-room-name"></p>
+        </div>
+        <button class="button button--ghost mobile-member-drawer__close" id="mobile-member-drawer-close" type="button">Close</button>
+      </div>
+      <div class="drawer-card drawer-card--key">
+        <span class="drawer-key__label">Room key</span>
+        <strong id="mobile-room-key-display">--------</strong>
+      </div>
+      <div class="equivalent-grid equivalent-grid--drawer" id="mobile-drawer-equivalent-grid"></div>
+      <div class="drawer-card room-governance">
+        <div class="room-governance__copy">
+          <p class="panel__kicker">Room controls</p>
+          <h3>Manage this room</h3>
+          <p class="room-governance__status" id="mobile-delete-vote-status">No delete vote is active.</p>
+        </div>
+        <button class="button button--ghost" id="mobile-exit-room-button" type="button">Exit room</button>
+        <button class="button button--danger" id="mobile-delete-room-button" type="button">Delete room</button>
+      </div>
+      <button class="button button--ghost drawer-logout" id="mobile-logout-button" type="button">Logout</button>
+    </div>
+  </div>
   <div class="join-route-loader" id="join-route-loader" hidden>
     <div class="join-route-loader__spinner"></div>
     <p id="join-route-loader-text">Validating invite...</p>

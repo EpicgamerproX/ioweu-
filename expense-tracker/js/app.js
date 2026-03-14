@@ -97,6 +97,17 @@ const elements = {
   memberDrawerToggle: document.querySelector("#member-drawer-toggle"),
   memberDrawerClose: document.querySelector("#member-drawer-close"),
   memberDrawerScrim: document.querySelector("#member-drawer-scrim"),
+  mobileMemberDrawer: document.querySelector("#mobile-member-drawer"),
+  mobileMemberDrawerScrim: document.querySelector("#mobile-member-drawer-scrim"),
+  mobileMemberDrawerClose: document.querySelector("#mobile-member-drawer-close"),
+  mobileDrawerTitle: document.querySelector("#mobile-drawer-title"),
+  mobileDrawerRoomName: document.querySelector("#mobile-drawer-room-name"),
+  mobileDrawerEquivalentGrid: document.querySelector("#mobile-drawer-equivalent-grid"),
+  mobileRoomKeyDisplay: document.querySelector("#mobile-room-key-display"),
+  mobileDeleteVoteStatus: document.querySelector("#mobile-delete-vote-status"),
+  mobileLogoutButton: document.querySelector("#mobile-logout-button"),
+  mobileExitRoomButton: document.querySelector("#mobile-exit-room-button"),
+  mobileDeleteRoomButton: document.querySelector("#mobile-delete-room-button"),
   expenseAmountInput: document.querySelector("#expense-amount"),
   amountBuilderBody: document.querySelector("#amount-builder-body"),
   amountBuilderTotal: document.querySelector("#amount-builder-total"),
@@ -151,6 +162,7 @@ function bindEvents() {
   elements.expenseForm.addEventListener("submit", handleCreateExpense);
   elements.splitMode.addEventListener("change", renderCustomShareInputs);
   elements.logoutButton.addEventListener("click", handleLogout);
+  elements.mobileLogoutButton.addEventListener("click", handleLogout);
   elements.memberDrawerToggle.addEventListener("click", toggleMemberDrawer);
   if (elements.memberDrawerClose) {
     elements.memberDrawerClose.addEventListener("click", closeMemberDrawer);
@@ -158,15 +170,24 @@ function bindEvents() {
   if (elements.memberDrawerScrim) {
     elements.memberDrawerScrim.addEventListener("click", closeMemberDrawer);
   }
+  if (elements.mobileMemberDrawerClose) {
+    elements.mobileMemberDrawerClose.addEventListener("click", closeMemberDrawer);
+  }
+  if (elements.mobileMemberDrawerScrim) {
+    elements.mobileMemberDrawerScrim.addEventListener("click", closeMemberDrawer);
+  }
   elements.cashSelectorRoot.addEventListener("cashValueSelected", handleCashValueSelected);
   elements.cashSelectorRoot.addEventListener("cashActionRequested", handleCashSelectorAction);
   elements.amountBuilderClear.addEventListener("click", handleClearAmountBuilder);
   elements.amountBuilderConfirm.addEventListener("click", handleConfirmAmountBuilder);
   elements.exitRoomButton.addEventListener("click", handleExitRoom);
+  elements.mobileExitRoomButton.addEventListener("click", handleExitRoom);
   elements.deleteRoomButton.addEventListener("click", openDeleteVoteModal);
+  elements.mobileDeleteRoomButton.addEventListener("click", openDeleteVoteModal);
   elements.deleteVoteClose.addEventListener("click", closeDeleteVoteModal);
   elements.deleteVoteBackdrop.addEventListener("click", closeDeleteVoteModal);
   elements.deleteVoteConfirm.addEventListener("click", handleCastDeleteVote);
+  window.addEventListener("resize", handleViewportChange);
 
   elements.tabButtons.forEach((button) => {
     button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
@@ -280,6 +301,7 @@ async function bootstrapWorkspace() {
   elements.welcomeTitle.textContent = `${state.currentMember.display_name}'s dashboard`;
   elements.drawerName.textContent = state.currentMember.display_name;
   elements.drawerTitle.textContent = `${state.currentMember.display_name}'s spend story`;
+  elements.mobileDrawerTitle.textContent = `${state.currentMember.display_name}'s spend story`;
 
   try {
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
@@ -472,21 +494,29 @@ function renderDrawer() {
   elements.drawerRoomName.textContent = activeGroup
     ? `${activeGroup.name} room`
     : "No room selected";
+  elements.mobileDrawerRoomName.textContent = activeGroup
+    ? `${activeGroup.name} room`
+    : "No room selected";
   elements.roomKeyDisplay.textContent = roomKey;
+  elements.mobileRoomKeyDisplay.textContent = roomKey;
   elements.activeRoomChip.textContent = activeGroup
     ? `${activeGroup.name} | ${roomKey}`
     : "No room selected";
   elements.exitRoomButton.disabled = !activeGroup;
+  elements.mobileExitRoomButton.disabled = !activeGroup;
   elements.deleteRoomButton.disabled = !activeGroup;
+  elements.mobileDeleteRoomButton.disabled = !activeGroup;
   elements.deleteVoteStatus.textContent = formatDeleteVoteStatus();
+  elements.mobileDeleteVoteStatus.textContent = formatDeleteVoteStatus();
 
   const funEquivalents = state.summary?.fun_equivalents || [];
   if (!funEquivalents.length) {
     elements.drawerEquivalentGrid.innerHTML = `<div class="empty-state">Add expenses you paid to unlock your dashboard cards.</div>`;
+    elements.mobileDrawerEquivalentGrid.innerHTML = `<div class="empty-state">Add expenses you paid to unlock your dashboard cards.</div>`;
     return;
   }
 
-  elements.drawerEquivalentGrid.innerHTML = funEquivalents
+  const equivalentMarkup = funEquivalents
     .map((item) => `
       <article class="equivalent-card">
         <p class="equivalent-card__label">${escapeHtml(item.label)}</p>
@@ -494,6 +524,8 @@ function renderDrawer() {
       </article>
     `)
     .join("");
+  elements.drawerEquivalentGrid.innerHTML = equivalentMarkup;
+  elements.mobileDrawerEquivalentGrid.innerHTML = equivalentMarkup;
 }
 
 function renderEmptyWorkspace(message) {
@@ -509,11 +541,15 @@ function renderEmptyWorkspace(message) {
   elements.customShareList.innerHTML = "";
   elements.expenseHistory.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   elements.drawerEquivalentGrid.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+  elements.mobileDrawerEquivalentGrid.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   elements.roomKeyDisplay.textContent = "--------";
+  elements.mobileRoomKeyDisplay.textContent = "--------";
   elements.drawerRoomName.textContent = message;
+  elements.mobileDrawerRoomName.textContent = message;
   elements.activeRoomChip.textContent = "No room selected";
   elements.activeRoomIdDisplay.textContent = "Room ID: --------";
   elements.deleteVoteStatus.textContent = "No delete vote is active.";
+  elements.mobileDeleteVoteStatus.textContent = "No delete vote is active.";
   closeDeleteVoteModal();
   closeCreateRoomPanel({ preserveStatus: true });
   closeMemberDrawer();
@@ -927,6 +963,22 @@ function getAmountBuilderTotal() {
 }
 
 function toggleMemberDrawer() {
+  if (isMobileDrawerMode()) {
+    const isOpen = !elements.mobileMemberDrawer.classList.contains("is-open");
+    elements.mobileMemberDrawer.hidden = false;
+    elements.mobileMemberDrawer.classList.toggle("is-open", isOpen);
+    elements.memberDrawerToggle.setAttribute("aria-expanded", String(isOpen));
+    document.body.classList.toggle("is-drawer-open", isOpen);
+    if (!isOpen) {
+      window.setTimeout(() => {
+        if (!elements.mobileMemberDrawer.classList.contains("is-open")) {
+          elements.mobileMemberDrawer.hidden = true;
+        }
+      }, 220);
+    }
+    return;
+  }
+
   const isOpen = elements.memberDrawer.classList.toggle("is-open");
   elements.memberDrawerToggle.setAttribute("aria-expanded", String(isOpen));
   document.body.classList.toggle("is-drawer-open", isOpen);
@@ -934,8 +986,14 @@ function toggleMemberDrawer() {
 
 function closeMemberDrawer() {
   elements.memberDrawer.classList.remove("is-open");
+  elements.mobileMemberDrawer.classList.remove("is-open");
+  elements.mobileMemberDrawer.hidden = true;
   elements.memberDrawerToggle.setAttribute("aria-expanded", "false");
   document.body.classList.remove("is-drawer-open");
+}
+
+function handleViewportChange() {
+  closeMemberDrawer();
 }
 
 function computeBalances(expenses, settlements, members, currentMemberId) {
@@ -1403,6 +1461,10 @@ function nearlyEqual(a, b) {
 
 function roundCurrency(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function isMobileDrawerMode() {
+  return window.matchMedia("(max-width: 980px)").matches;
 }
 
 function generateRoomKeyCandidate() {
