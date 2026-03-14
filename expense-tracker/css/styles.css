@@ -1210,6 +1210,7 @@ tbody tr:last-child td {
     border: 0;
     box-shadow: none;
     overflow: visible;
+    z-index: 55;
   }
 
   .member-drawer__toggle {
@@ -1230,7 +1231,7 @@ tbody tr:last-child td {
     opacity: 0;
     pointer-events: none;
     transition: opacity 180ms ease;
-    z-index: 0;
+    z-index: 54;
   }
 
   .member-drawer__panel-header,
@@ -1255,7 +1256,7 @@ tbody tr:last-child td {
     pointer-events: auto;
     overflow: auto;
     transition: transform 220ms ease;
-    z-index: 1;
+    z-index: 55;
   }
 
   .member-drawer.is-open .member-drawer__scrim {
@@ -1264,7 +1265,12 @@ tbody tr:last-child td {
   }
 
   .member-drawer.is-open .member-drawer__panel {
+    max-height: min(88vh, 720px);
+    padding: 22px 18px calc(18px + env(safe-area-inset-bottom));
+    opacity: 1;
     transform: translateY(0);
+    pointer-events: auto;
+    overflow: auto;
   }
 
   body.is-drawer-open {
