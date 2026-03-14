@@ -22,6 +22,7 @@ export class CashSelector {
 
     this.handleGlobalPointerMove = this.handleGlobalPointerMove.bind(this);
     this.handleGlobalPointerUp = this.handleGlobalPointerUp.bind(this);
+    this.handleGlobalTouchMove = this.handleGlobalTouchMove.bind(this);
     this.flushPointerMove = this.flushPointerMove.bind(this);
 
     this.render();
@@ -179,6 +180,7 @@ export class CashSelector {
     window.addEventListener("pointermove", this.handleGlobalPointerMove, { passive: false });
     window.addEventListener("pointerup", this.handleGlobalPointerUp, { passive: false });
     window.addEventListener("pointercancel", this.handleGlobalPointerUp, { passive: false });
+    window.addEventListener("touchmove", this.handleGlobalTouchMove, { passive: false });
   }
 
   positionOverlayElements() {
@@ -199,6 +201,14 @@ export class CashSelector {
     if (!this.state.rafId) {
       this.state.rafId = window.requestAnimationFrame(this.flushPointerMove);
     }
+  }
+
+  handleGlobalTouchMove(event) {
+    if (!this.state.overlayOpen) {
+      return;
+    }
+
+    event.preventDefault();
   }
 
   flushPointerMove() {
@@ -261,6 +271,7 @@ export class CashSelector {
     window.removeEventListener("pointermove", this.handleGlobalPointerMove);
     window.removeEventListener("pointerup", this.handleGlobalPointerUp);
     window.removeEventListener("pointercancel", this.handleGlobalPointerUp);
+    window.removeEventListener("touchmove", this.handleGlobalTouchMove);
     document.body.classList.remove("is-cash-selector-locked");
 
     if (this.state.rafId) {

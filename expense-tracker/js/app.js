@@ -267,6 +267,7 @@ async function bootstrapWorkspace() {
     return;
   }
 
+  hideJoinRouteLoader();
   elements.authPanel.hidden = true;
   elements.workspacePanel.hidden = false;
   elements.welcomeTitle.textContent = `${state.currentMember.display_name}'s dashboard`;
@@ -299,6 +300,7 @@ async function bootstrapWorkspace() {
   } catch (error) {
     setStatus(elements.authStatus, error.message || "Unable to load workspace.");
   } finally {
+    hideJoinRouteLoader();
     setWorkspaceLoading(false);
   }
 }
@@ -1160,6 +1162,7 @@ function primeJoinRouteStatus() {
 
 async function maybeAutoJoinPendingRoom() {
   if (!state.pendingJoinRoomId || !state.currentMember || state.pendingJoinInFlight) {
+    hideJoinRouteLoader();
     return;
   }
 
