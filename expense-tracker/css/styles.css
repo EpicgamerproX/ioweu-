@@ -385,6 +385,7 @@ tbody tr:last-child td {
 }
 
 .expense-panel {
+  min-width: 0;
   border-radius: var(--radius-lg);
   background: rgba(255, 250, 241, 0.72);
   border: 1px solid var(--line);
@@ -962,11 +963,12 @@ tbody tr:last-child td {
 
 .invite-panel {
   position: fixed;
-  right: 18px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%) translateX(calc(100% + 28px));
-  width: min(360px, calc(100vw - 32px));
+  width: min(340px, calc(100vw - 24px));
   z-index: 40;
+  overflow: visible;
   pointer-events: none;
   transition: transform 240ms ease;
 }
@@ -976,7 +978,7 @@ tbody tr:last-child td {
 }
 
 .invite-panel[data-state="minimized"] {
-  transform: translateY(-50%) translateX(calc(100% - 58px));
+  transform: translateY(-50%) translateX(calc(100% - 76px));
 }
 
 .invite-panel[data-state="hidden"] {
@@ -990,6 +992,8 @@ tbody tr:last-child td {
 
 .invite-panel__surface {
   padding: 18px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
   border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.28);
   background: linear-gradient(180deg, rgba(255, 250, 244, 0.76), rgba(247, 238, 228, 0.82));
@@ -1247,6 +1251,9 @@ tbody tr:last-child td {
     background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(246, 236, 223, 0.98));
     box-shadow: 0 -20px 50px rgba(40, 26, 15, 0.22);
     transform: translateY(104%);
+    opacity: 1;
+    pointer-events: auto;
+    overflow: auto;
     transition: transform 220ms ease;
     z-index: 1;
   }
@@ -1401,9 +1408,7 @@ tbody tr:last-child td {
   }
 
   .amount-builder {
-    position: sticky;
-    top: 12px;
-    z-index: 5;
+    position: static;
   }
 
   .room-governance {
@@ -1445,6 +1450,14 @@ tbody tr:last-child td {
     min-width: 620px;
   }
 
+  .amount-builder__ledger table {
+    min-width: 0;
+  }
+
+  .amount-builder__ledger .table-shell {
+    overflow-x: hidden;
+  }
+
   .cash-selector__button {
     font-size: 0.94rem;
   }
@@ -1457,9 +1470,11 @@ tbody tr:last-child td {
 
   .invite-panel {
     right: 0;
+    width: 100%;
   }
 
   .invite-panel__surface {
     padding: 16px;
+    width: calc(100% - 16px);
   }
 }
