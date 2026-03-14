@@ -108,6 +108,7 @@ const elements = {
   mobileLogoutButton: document.querySelector("#mobile-logout-button"),
   mobileExitRoomButton: document.querySelector("#mobile-exit-room-button"),
   mobileDeleteRoomButton: document.querySelector("#mobile-delete-room-button"),
+  toggleRoomKey: document.querySelector("#toggle-room-key"),
   expenseAmountInput: document.querySelector("#expense-amount"),
   amountBuilderBody: document.querySelector("#amount-builder-body"),
   amountBuilderTotal: document.querySelector("#amount-builder-total"),
@@ -488,6 +489,7 @@ function renderWorkspace() {
 function renderDrawer() {
   const activeGroup = getActiveGroup();
   const roomKey = getGroupRoomKey(activeGroup);
+  elements.toggleRoomKey.textContent = roomKey;
   elements.activeRoomIdDisplay.textContent = activeGroup
     ? `Room ID: ${roomKey}`
     : "Room ID: --------";
@@ -542,6 +544,7 @@ function renderEmptyWorkspace(message) {
   elements.expenseHistory.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   elements.drawerEquivalentGrid.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   elements.mobileDrawerEquivalentGrid.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+  elements.toggleRoomKey.textContent = "--------";
   elements.roomKeyDisplay.textContent = "--------";
   elements.mobileRoomKeyDisplay.textContent = "--------";
   elements.drawerRoomName.textContent = message;

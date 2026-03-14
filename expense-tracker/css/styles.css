@@ -633,6 +633,24 @@ tbody tr:last-child td {
   text-overflow: ellipsis;
 }
 
+.toggle-room-key {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+  opacity: 0.9;
+}
+
+.member-drawer__toggle:hover .toggle-room-key {
+  opacity: 1;
+}
+
 .member-drawer__scrim,
 .member-drawer__close,
 .member-drawer__panel-header {
