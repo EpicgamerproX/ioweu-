@@ -19,7 +19,7 @@ import {
 } from "./supabase-client.js";
 import { CashSelector } from "./cash-selector.js";
 import { InviteSidePanel } from "./invite-side-panel.js";
-import { clearJoinRoute, getJoinRouteRoomId, normalizeInviteData } from "./room-invite-api.js";
+import { clearJoinRoute, normalizeInviteData } from "./room-invite-api.js";
 
 const state = {
   currentMember: null,
@@ -33,13 +33,11 @@ const state = {
   summary: null,
   amountEntries: [],
   deleteVote: null,
-  activeInvite: null,
-  pendingJoinRoomId: "",
-  pendingJoinInFlight: false
+  activeInvite: null
 };
 
 const UI_TIMINGS = {
-  realtimeSkeletonMs: 2500
+  postAuthSkeletonMs: 2000
 };
 
 const realtimeState = {
@@ -47,10 +45,6 @@ const realtimeState = {
   subscribedGroupId: null,
   tabId: createTabId(),
   refreshInFlight: false
-};
-
-const workspaceLoadingState = {
-  skeletonCount: 0
 };
 
 const elements = {
@@ -113,9 +107,7 @@ const elements = {
   deleteVoteConfirm: document.querySelector("#delete-vote-confirm"),
   deleteVoteMembers: document.querySelector("#delete-vote-members"),
   deleteVoteModalStatus: document.querySelector("#delete-vote-modal-status"),
-  inviteSidePanelRoot: document.querySelector("#invite-side-panel-root"),
-  joinRouteLoader: document.querySelector("#join-route-loader"),
-  joinRouteLoaderText: document.querySelector("#join-route-loader-text")
+  inviteSidePanelRoot: document.querySelector("#invite-side-panel-root")
 };
 
 new CashSelector(elements.cashSelectorRoot);
@@ -128,10 +120,9 @@ const invitePanel = new InviteSidePanel(elements.inviteSidePanelRoot, {
 });
 
 function init() {
-  state.pendingJoinRoomId = getJoinRouteRoomId();
+  clearJoinRoute();
   bindEvents();
   setDefaultDate();
-  primeJoinRouteStatus();
   restoreSession();
 }
 
@@ -237,7 +228,7 @@ async function handleLogin(event) {
   try {
     const member = await loginMember(String(formData.get("email")), String(formData.get("password")));
     state.currentMember = normalizeMember(member);
-    await bootstrapWorkspace();
+    await enterWorkspaceAfterAuth();
     form.reset();
     setStatus(elements.authStatus, "");
   } catch (error) {
@@ -262,7 +253,7 @@ async function handleSignup(event) {
 
     state.currentMember = normalizeMember(member);
     state.activeGroupId = null;
-    await bootstrapWorkspace();
+    await enterWorkspaceAfterAuth();
     form.reset();
     setStatus(elements.authStatus, "");
   } catch (error) {
@@ -275,7 +266,6 @@ async function bootstrapWorkspace() {
     return;
   }
 
-  hideJoinRouteLoader();
   elements.authPanel.hidden = true;
   elements.workspacePanel.hidden = false;
   elements.welcomeTitle.textContent = `${state.currentMember.display_name}'s dashboard`;
@@ -283,7 +273,6 @@ async function bootstrapWorkspace() {
   elements.drawerTitle.textContent = `${state.currentMember.display_name}'s spend story`;
 
   try {
-    setWorkspaceLoading(true, { skeleton: true });
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
     if (!state.availableGroups.length) {
       state.activeGroupId = null;
@@ -291,9 +280,7 @@ async function bootstrapWorkspace() {
       await syncRoomRealtimeSubscription();
       renderGroups();
       renderEmptyWorkspace("You are not part of any rooms yet. Create a room or join one with a room ID.");
-      await maybeAutoJoinPendingRoom();
       saveSession();
-      setWorkspaceLoading(false, { skeleton: true });
       return;
     }
 
@@ -302,15 +289,21 @@ async function bootstrapWorkspace() {
       : state.availableGroups[0].id;
 
     renderGroups();
-    await loadActiveGroupData({ manageLoading: false });
-    await maybeAutoJoinPendingRoom();
+    await loadActiveGroupData();
     saveSession();
   } catch (error) {
-    setStatus(elements.authStatus, error.message || "Unable to load workspace.");
-  } finally {
-    hideJoinRouteLoader();
-    setWorkspaceLoading(false, { skeleton: true });
+    const message = error.message || "Unable to load workspace.";
+    renderEmptyWorkspace(message);
+    setStatus(elements.expenseStatus, message);
   }
+}
+
+async function enterWorkspaceAfterAuth() {
+  setWorkspaceLoading(true);
+  const bootstrapPromise = bootstrapWorkspace();
+  await wait(UI_TIMINGS.postAuthSkeletonMs);
+  setWorkspaceLoading(false);
+  await bootstrapPromise;
 }
 
 async function handleGroupChange(event) {
@@ -392,12 +385,7 @@ async function handleJoinRoom(event) {
   }
 }
 
-async function loadActiveGroupData(options = {}) {
-  const {
-    showSkeleton = false,
-    manageLoading = true
-  } = options;
-
+async function loadActiveGroupData() {
   if (!state.activeGroupId) {
     await syncRoomRealtimeSubscription();
     state.deleteVote = null;
@@ -406,9 +394,6 @@ async function loadActiveGroupData(options = {}) {
   }
 
   await syncRoomRealtimeSubscription();
-  if (manageLoading) {
-    setWorkspaceLoading(true, { skeleton: showSkeleton });
-  }
   setStatus(elements.expenseStatus, "Loading room balances, expenses, and payments...");
 
   try {
@@ -431,10 +416,6 @@ async function loadActiveGroupData(options = {}) {
     setStatus(elements.expenseStatus, "");
   } catch (error) {
     renderEmptyWorkspace(error.message || "Unable to load room data.");
-  } finally {
-    if (manageLoading) {
-      setWorkspaceLoading(false, { skeleton: showSkeleton });
-    }
   }
 }
 
@@ -833,13 +814,12 @@ function handleLogout() {
   state.amountEntries = [];
   state.deleteVote = null;
   state.activeInvite = null;
-  state.pendingJoinRoomId = "";
   void syncRoomRealtimeSubscription(null);
   clearSession();
   closeCreateRoomPanel({ preserveStatus: false });
   closeDeleteVoteModal();
   closeMemberDrawer();
-  hideJoinRouteLoader();
+  setWorkspaceLoading(false);
   invitePanel.hide();
   elements.authPanel.hidden = false;
   elements.workspacePanel.hidden = true;
@@ -1135,101 +1115,36 @@ async function notifyRoomChange(groupId, type, payload = {}) {
 
 async function refreshWorkspaceFromRealtime(payload) {
   realtimeState.refreshInFlight = true;
-  setWorkspaceLoading(true, { skeleton: true });
-  const refreshMaskDelay = wait(UI_TIMINGS.realtimeSkeletonMs);
-  let refreshTask;
 
   try {
     if (payload.type === "room_deleted" || payload.type === "member_left") {
-      refreshTask = (async () => {
-        state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
-        state.activeGroupId = state.availableGroups.some((group) => String(group.id) === String(state.activeGroupId))
-          ? state.activeGroupId
-          : state.availableGroups[0]?.id || null;
-        renderGroups();
-        await loadActiveGroupData({ manageLoading: false });
-        saveSession();
-      })();
+      state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+      state.activeGroupId = state.availableGroups.some((group) => String(group.id) === String(state.activeGroupId))
+        ? state.activeGroupId
+        : state.availableGroups[0]?.id || null;
+      renderGroups();
+      await loadActiveGroupData();
+      saveSession();
     } else {
-      refreshTask = loadActiveGroupData({ manageLoading: false });
+      await loadActiveGroupData();
     }
-
-    void refreshTask.catch((error) => {
-      console.error(error);
-      setStatus(elements.expenseStatus, error.message || "Unable to refresh room data.");
-    });
+  } catch (error) {
+    console.error(error);
+    setStatus(elements.expenseStatus, error.message || "Unable to refresh room data.");
   } finally {
-    await refreshMaskDelay;
     realtimeState.refreshInFlight = false;
-    setWorkspaceLoading(false, { skeleton: true });
   }
 }
 
-function setWorkspaceLoading(isLoading, options = {}) {
-  const showSkeleton = Boolean(options.skeleton);
-  if (!showSkeleton) {
-    return;
-  }
-
-  workspaceLoadingState.skeletonCount = Math.max(
-    0,
-    workspaceLoadingState.skeletonCount + (isLoading ? 1 : -1)
-  );
-
-  const shouldShowSkeleton = workspaceLoadingState.skeletonCount > 0;
-  elements.workspacePanel.classList.toggle("is-loading", shouldShowSkeleton);
-  elements.workspaceSkeleton.hidden = !shouldShowSkeleton;
+function setWorkspaceLoading(isLoading) {
+  elements.workspacePanel.classList.toggle("is-loading", isLoading);
+  elements.workspaceSkeleton.hidden = !isLoading;
 }
 
 function wait(durationMs) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, durationMs);
   });
-}
-
-function primeJoinRouteStatus() {
-  if (state.pendingJoinRoomId && !state.currentMember) {
-    setStatus(elements.authStatus, `Log in or sign up to join room ${state.pendingJoinRoomId}.`);
-  }
-}
-
-async function maybeAutoJoinPendingRoom() {
-  if (!state.pendingJoinRoomId || !state.currentMember || state.pendingJoinInFlight) {
-    hideJoinRouteLoader();
-    return;
-  }
-
-  state.pendingJoinInFlight = true;
-  showJoinRouteLoader(`Joining room ${state.pendingJoinRoomId}...`);
-
-  try {
-    const joined = await joinGroupByRoomKey(state.currentMember.session_token, state.pendingJoinRoomId);
-    state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
-    state.activeGroupId = joined.id;
-    renderGroups();
-    await loadActiveGroupData();
-    clearJoinRoute();
-    state.pendingJoinRoomId = "";
-    saveSession();
-    setStatus(elements.expenseStatus, `Joined ${joined.name}.`);
-  } catch (error) {
-    setStatus(elements.authStatus, error.message || "Unable to join room from invite.");
-    clearJoinRoute();
-    state.pendingJoinRoomId = "";
-  } finally {
-    state.pendingJoinInFlight = false;
-    hideJoinRouteLoader();
-  }
-}
-
-function showJoinRouteLoader(message) {
-  elements.joinRouteLoader.hidden = false;
-  elements.joinRouteLoaderText.textContent = message;
-}
-
-function hideJoinRouteLoader() {
-  elements.joinRouteLoader.hidden = true;
-  elements.joinRouteLoaderText.textContent = "Joining room...";
 }
 
 async function renderInvitePanel() {
