@@ -546,6 +546,10 @@ tbody tr:last-child td {
   pointer-events: none;
 }
 
+.workspace-skeleton[hidden] {
+  display: none;
+}
+
 .skeleton-row {
   display: grid;
   grid-template-columns: 1fr auto;
