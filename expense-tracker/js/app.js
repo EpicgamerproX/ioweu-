@@ -19,7 +19,7 @@ import {
 } from "./supabase-client.js";
 import { CashSelector } from "./cash-selector.js";
 import { InviteSidePanel } from "./invite-side-panel.js";
-import { clearJoinRoute, normalizeInviteData } from "./room-invite-api.js";
+import { clearJoinRoute, getJoinRouteRoomId, normalizeInviteData } from "./room-invite-api.js";
 
 const state = {
   currentMember: null,
@@ -33,7 +33,9 @@ const state = {
   summary: null,
   amountEntries: [],
   deleteVote: null,
-  activeInvite: null
+  activeInvite: null,
+  pendingJoinRoomId: "",
+  pendingJoinInFlight: false
 };
 
 const UI_TIMINGS = {
@@ -107,7 +109,9 @@ const elements = {
   deleteVoteConfirm: document.querySelector("#delete-vote-confirm"),
   deleteVoteMembers: document.querySelector("#delete-vote-members"),
   deleteVoteModalStatus: document.querySelector("#delete-vote-modal-status"),
-  inviteSidePanelRoot: document.querySelector("#invite-side-panel-root")
+  inviteSidePanelRoot: document.querySelector("#invite-side-panel-root"),
+  joinRouteLoader: document.querySelector("#join-route-loader"),
+  joinRouteLoaderText: document.querySelector("#join-route-loader-text")
 };
 
 new CashSelector(elements.cashSelectorRoot);
@@ -116,13 +120,17 @@ const invitePanel = new InviteSidePanel(elements.inviteSidePanelRoot, {
   onCopyLink: (invite) => copyInviteText(invite?.inviteUrl || "", "Invite link copied."),
   onDownload: (invite, generator) => {
     generator.download(`${(invite?.roomId || "room-invite").toLowerCase()}-qr.png`);
+  },
+  onError: (message) => {
+    setStatus(elements.expenseStatus, message || "Unable to render room invite.");
   }
 });
 
 function init() {
-  clearJoinRoute();
+  state.pendingJoinRoomId = getJoinRouteRoomId();
   bindEvents();
   setDefaultDate();
+  primeJoinRouteStatus();
   restoreSession();
 }
 
@@ -275,12 +283,14 @@ async function bootstrapWorkspace() {
 
   try {
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+    syncActiveInvite();
     if (!state.availableGroups.length) {
       state.activeGroupId = null;
       state.deleteVote = null;
       await syncRoomRealtimeSubscription();
       renderGroups();
       renderEmptyWorkspace("You are not part of any rooms yet. Create a room or join one with a room ID.");
+      await maybeAutoJoinPendingRoom();
       saveSession();
       return;
     }
@@ -291,6 +301,7 @@ async function bootstrapWorkspace() {
 
     renderGroups();
     await loadActiveGroupData();
+    await maybeAutoJoinPendingRoom();
     saveSession();
   } catch (error) {
     const message = error.message || "Unable to load workspace.";
@@ -309,6 +320,7 @@ async function enterWorkspaceAfterAuth() {
 
 async function handleGroupChange(event) {
   state.activeGroupId = event.target.value;
+  syncActiveInvite();
   resetAmountBuilder(true);
   closeCreateRoomPanel();
   await loadActiveGroupData();
@@ -373,6 +385,7 @@ async function handleJoinRoom(event) {
     const joined = await joinGroupByRoomKey(state.currentMember.session_token, roomKey);
     state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
     state.activeGroupId = joined.id;
+    syncActiveInvite();
     resetAmountBuilder(true);
     closeCreateRoomPanel();
     renderGroups();
@@ -390,11 +403,13 @@ async function loadActiveGroupData() {
   if (!state.activeGroupId) {
     await syncRoomRealtimeSubscription();
     state.deleteVote = null;
+    syncActiveInvite();
     renderEmptyWorkspace("Select a room to continue.");
     return;
   }
 
   await syncRoomRealtimeSubscription();
+  syncActiveInvite();
   setStatus(elements.expenseStatus, "Loading room balances, expenses, and payments...");
 
   try {
@@ -483,7 +498,7 @@ function renderDrawer() {
 
 function renderEmptyWorkspace(message) {
   state.deleteVote = null;
-  state.activeInvite = state.activeGroupId ? state.activeInvite : null;
+  syncActiveInvite();
   elements.owedToYou.textContent = formatCurrency(0);
   elements.youOwe.textContent = formatCurrency(0);
   elements.netBalance.textContent = formatCurrency(0);
@@ -827,12 +842,15 @@ function handleLogout() {
   state.amountEntries = [];
   state.deleteVote = null;
   state.activeInvite = null;
+  state.pendingJoinRoomId = "";
+  state.pendingJoinInFlight = false;
   void syncRoomRealtimeSubscription(null);
   clearSession();
   closeCreateRoomPanel({ preserveStatus: false });
   closeDeleteVoteModal();
   closeMemberDrawer();
   setWorkspaceLoading(false);
+  hideJoinRouteLoader();
   invitePanel.hide();
   elements.authPanel.hidden = false;
   elements.workspacePanel.hidden = true;
@@ -1131,6 +1149,7 @@ async function refreshWorkspaceFromRealtime(payload) {
       state.activeGroupId = state.availableGroups.some((group) => String(group.id) === String(state.activeGroupId))
         ? state.activeGroupId
         : state.availableGroups[0]?.id || null;
+      syncActiveInvite();
       renderGroups();
       await loadActiveGroupData();
       saveSession();
@@ -1157,12 +1176,18 @@ function wait(durationMs) {
 }
 
 async function renderInvitePanel() {
+  syncActiveInvite();
   if (!state.activeInvite || String(state.activeInvite.groupId) !== String(state.activeGroupId)) {
     invitePanel.hide();
     return;
   }
 
   await invitePanel.setInvite(state.activeInvite);
+}
+
+function syncActiveInvite() {
+  const activeGroup = getActiveGroup();
+  state.activeInvite = normalizeInviteData(activeGroup);
 }
 
 async function copyInviteText(value, successMessage) {
@@ -1184,6 +1209,55 @@ function formatDeleteVoteStatus() {
   }
 
   return `${state.deleteVote.approval_count}/${state.deleteVote.active_member_count} members approved deleting this room.`;
+}
+
+function primeJoinRouteStatus() {
+  if (!state.pendingJoinRoomId || state.currentMember) {
+    return;
+  }
+
+  setStatus(elements.authStatus, `Log in or sign up to join room ${state.pendingJoinRoomId}.`);
+}
+
+async function maybeAutoJoinPendingRoom() {
+  if (!state.pendingJoinRoomId || !state.currentMember || state.pendingJoinInFlight) {
+    hideJoinRouteLoader();
+    return;
+  }
+
+  state.pendingJoinInFlight = true;
+  showJoinRouteLoader(`Validating invite for room ${state.pendingJoinRoomId}...`);
+
+  try {
+    const joined = await joinGroupByRoomKey(state.currentMember.session_token, state.pendingJoinRoomId);
+    state.availableGroups = await fetchGroupsForMember(state.currentMember.session_token);
+    state.activeGroupId = joined.id;
+    syncActiveInvite();
+    renderGroups();
+    await loadActiveGroupData();
+    clearJoinRoute();
+    state.pendingJoinRoomId = "";
+    saveSession();
+    setStatus(elements.expenseStatus, `Joined ${joined.name}.`);
+  } catch (error) {
+    const message = error.message || "Unable to join room from invite.";
+    setStatus(state.currentMember ? elements.expenseStatus : elements.authStatus, message);
+    clearJoinRoute();
+    state.pendingJoinRoomId = "";
+  } finally {
+    state.pendingJoinInFlight = false;
+    hideJoinRouteLoader();
+  }
+}
+
+function showJoinRouteLoader(message) {
+  elements.joinRouteLoader.hidden = false;
+  elements.joinRouteLoaderText.textContent = message;
+}
+
+function hideJoinRouteLoader() {
+  elements.joinRouteLoader.hidden = true;
+  elements.joinRouteLoaderText.textContent = "Validating invite...";
 }
 
 function renderDeleteVoteModal() {

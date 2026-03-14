@@ -16,6 +16,7 @@ export class QRBoxCard {
         <div class="invite-qr-card__canvas-wrap" id="invite-qr-canvas-wrap"></div>
         <p class="invite-qr-card__label">Room Invite Code</p>
         <code class="invite-qr-card__code" id="invite-room-code">--------</code>
+        <p class="invite-qr-card__status" id="invite-qr-status" hidden></p>
         <div class="invite-qr-card__actions">
           <button class="button button--ghost" type="button" data-invite-action="copy-code">Copy Room Code</button>
           <button class="button button--ghost" type="button" data-invite-action="copy-link">Copy Invite Link</button>
@@ -26,6 +27,7 @@ export class QRBoxCard {
 
     this.code = this.root.querySelector("#invite-room-code");
     this.canvasWrap = this.root.querySelector("#invite-qr-canvas-wrap");
+    this.status = this.root.querySelector("#invite-qr-status");
     this.generator = new QRCodeGenerator(this.canvasWrap);
 
     this.root.querySelectorAll("[data-invite-action]").forEach((button) => {
@@ -47,6 +49,8 @@ export class QRBoxCard {
   async setInvite(invite) {
     this.invite = invite;
     this.code.textContent = invite?.roomId || "--------";
+    this.status.hidden = true;
+    this.status.textContent = "";
 
     if (!invite) {
       this.generator.lastValue = "";
@@ -55,6 +59,12 @@ export class QRBoxCard {
       return;
     }
 
-    await this.generator.render(invite.inviteUrl);
+    try {
+      await this.generator.render(invite.inviteUrl);
+    } catch (error) {
+      this.status.hidden = false;
+      this.status.textContent = error.message || "Unable to render QR code.";
+      this.callbacks.onError?.(this.status.textContent, invite);
+    }
   }
 }
