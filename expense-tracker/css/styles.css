@@ -634,21 +634,24 @@ tbody tr:last-child td {
 }
 
 .toggle-room-key {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.05em;
+  display: block !important;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: "Space Grotesk", monospace;
+  color: var(--text);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
-  opacity: 0.9;
+  margin-top: 4px;
+  opacity: 1;
+  font-feature-settings: "tnum" 1; /* Tabular numbers for keys */
 }
 
 .member-drawer__toggle:hover .toggle-room-key {
-  opacity: 1;
+  color: var(--accent);
+  text-shadow: 0 0 4px rgba(214, 107, 45, 0.3);
 }
 
 .member-drawer__scrim,
