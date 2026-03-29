@@ -717,9 +717,16 @@ body.is-cash-selector-locked {
   gap: 8px;
 }
 
+.group-strip__room-name {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.05rem;
+  color: #f7f8ff;
+}
+
 .group-strip__room-id {
   margin: 0;
-  color: var(--muted);
+  color: #9aff89;
   font-weight: 700;
 }
 
@@ -1110,7 +1117,10 @@ tbody tr:last-child td {
 .member-drawer__toggle {
   width: 100%;
   padding: 18px 20px;
-  background: transparent;
+  background: linear-gradient(135deg, rgba(18, 18, 27, 0.98), rgba(34, 18, 43, 0.98));
+  color: #f7f8ff;
+  border-bottom: 3px solid #000000;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
   text-align: left;
   cursor: pointer;
 }
@@ -1140,9 +1150,13 @@ tbody tr:last-child td {
   font-feature-settings: "tnum" 1; /* Tabular numbers for keys */
 }
 
+.member-drawer__label {
+  color: #9aff89;
+}
+
 .member-drawer__toggle:hover .toggle-room-key {
-  color: var(--accent);
-  text-shadow: 0 0 4px rgba(214, 107, 45, 0.3);
+  color: #48d9ff;
+  text-shadow: 0 0 6px rgba(72, 217, 255, 0.36);
 }
 
 .member-drawer__scrim,
@@ -1812,8 +1826,8 @@ tbody tr:last-child td {
   .member-drawer__toggle {
     width: auto;
     border-radius: 999px;
-    background: rgba(255, 252, 247, 0.9);
-    border: 1px solid var(--line);
+    background: linear-gradient(135deg, rgba(18, 18, 27, 0.98), rgba(34, 18, 43, 0.98));
+    border: 3px solid var(--line);
     box-shadow: var(--shadow-soft);
   }
 

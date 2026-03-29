@@ -64,6 +64,7 @@ const elements = {
   loginForm: document.querySelector("#login-form"),
   signupForm: document.querySelector("#signup-form"),
   groupSelect: document.querySelector("#group-select"),
+  activeRoomNameDisplay: document.querySelector("#active-room-name-display"),
   activeRoomIdDisplay: document.querySelector("#active-room-id-display"),
   createRoomPanel: document.querySelector("#create-room-panel"),
   createRoomForm: document.querySelector("#create-room-form"),
@@ -806,6 +807,9 @@ function renderDrawer() {
   const activeGroup = getActiveGroup();
   const roomKey = getGroupRoomKey(activeGroup);
   elements.toggleRoomKey.textContent = roomKey;
+  elements.activeRoomNameDisplay.textContent = activeGroup
+    ? activeGroup.name
+    : "No room selected";
   elements.activeRoomIdDisplay.textContent = activeGroup
     ? `Room key: ${roomKey}`
     : "Room key: --------";
@@ -866,6 +870,7 @@ function renderEmptyWorkspace(message) {
   elements.drawerRoomName.textContent = message;
   elements.mobileDrawerRoomName.textContent = message;
   elements.activeRoomChip.textContent = "No room selected";
+  elements.activeRoomNameDisplay.textContent = "No room selected";
   elements.activeRoomIdDisplay.textContent = "Room key: --------";
   elements.deleteVoteStatus.textContent = "No delete vote is active.";
   elements.mobileDeleteVoteStatus.textContent = "No delete vote is active.";
@@ -1695,13 +1700,21 @@ function renderDeleteVoteModal() {
     : formatDeleteVoteStatus());
 }
 
-function openDeleteVoteModal() {
+async function openDeleteVoteModal() {
   if (!state.activeGroupId) {
     return;
   }
 
   elements.deleteVoteModal.hidden = false;
-  renderDeleteVoteModal();
+  setStatus(elements.deleteVoteModalStatus, "Loading delete vote...");
+
+  try {
+    state.deleteVote = await fetchGroupDeleteVoteStatus(state.currentMember.session_token, state.activeGroupId);
+    renderDrawer();
+    renderDeleteVoteModal();
+  } catch (error) {
+    setStatus(elements.deleteVoteModalStatus, error.message || "Unable to load delete vote.");
+  }
 }
 
 function closeDeleteVoteModal() {
@@ -1714,15 +1727,14 @@ async function handleCastDeleteVote() {
     return;
   }
 
+  const deletingGroupId = state.activeGroupId;
+
   try {
     setStatus(elements.deleteVoteModalStatus, "Recording your vote...");
-    const result = await castGroupDeleteVote(state.currentMember.session_token, state.activeGroupId);
+    const result = await castGroupDeleteVote(state.currentMember.session_token, deletingGroupId);
     state.deleteVote = result;
     renderDrawer();
     renderDeleteVoteModal();
-
-    const eventType = result.deleted ? "room_deleted" : "delete_vote_updated";
-    await notifyRoomChange(state.activeGroupId, eventType);
 
     if (result.deleted) {
       closeDeleteVoteModal();
@@ -1730,6 +1742,20 @@ async function handleCastDeleteVote() {
       state.activeGroupId = state.availableGroups[0]?.id || null;
       renderGroups();
       await loadActiveGroupData();
+      saveSession();
+      setStatus(elements.expenseStatus, "Room deleted.");
+      try {
+        await notifyRoomChange(deletingGroupId, "room_deleted");
+      } catch (notifyError) {
+        console.error(notifyError);
+      }
+      return;
+    }
+
+    try {
+      await notifyRoomChange(deletingGroupId, "delete_vote_updated");
+    } catch (notifyError) {
+      console.error(notifyError);
     }
   } catch (error) {
     setStatus(elements.deleteVoteModalStatus, error.message || "Could not record delete vote.");
