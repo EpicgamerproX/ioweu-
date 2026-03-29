@@ -39,7 +39,12 @@ const state = {
 };
 
 const UI_TIMINGS = {
-  postAuthSkeletonMs: 2000
+  postAuthSkeletonMs: 2000,
+  authCarouselMs: 4200,
+  authQuoteMs: 6000,
+  authDeckFlipMs: 720,
+  authDeckWheelThreshold: 64,
+  cursorMorphMs: 520
 };
 
 const realtimeState = {
@@ -123,7 +128,14 @@ const elements = {
   deleteVoteModalStatus: document.querySelector("#delete-vote-modal-status"),
   inviteSidePanelRoot: document.querySelector("#invite-side-panel-root"),
   joinRouteLoader: document.querySelector("#join-route-loader"),
-  joinRouteLoaderText: document.querySelector("#join-route-loader-text")
+  joinRouteLoaderText: document.querySelector("#join-route-loader-text"),
+  authCarouselTrack: document.querySelector("#auth-carousel-track"),
+  authCarouselDots: document.querySelector("#auth-carousel-dots"),
+  authSlides: Array.from(document.querySelectorAll("[data-slide]")),
+  mobileAuthQuote: document.querySelector("#mobile-auth-quote"),
+  authCardDeck: document.querySelector("#auth-card-deck"),
+  authDeckCards: Array.from(document.querySelectorAll("[data-deck-card]")),
+  siteCursor: document.querySelector("#site-cursor")
 };
 
 new CashSelector(elements.cashSelectorRoot);
@@ -140,10 +152,298 @@ const invitePanel = new InviteSidePanel(elements.inviteSidePanelRoot, {
 
 function init() {
   state.pendingJoinRoomId = getJoinRouteRoomId();
+  initAuthShowcase();
   bindEvents(); 
   setDefaultDate();
   primeJoinRouteStatus();
   restoreSession();
+}
+
+function initAuthShowcase() {
+  initAuthCarousel();
+  initAuthCardDeck();
+  initDesktopCursor();
+  initMobileAuthQuotes();
+}
+
+function initAuthCardDeck() {
+  if (!elements.authCardDeck || !elements.authDeckCards.length) {
+    return;
+  }
+
+  const deckState = {
+    activeIndex: 0,
+    wheelDelta: 0,
+    isLocked: false,
+    isHovering: false
+  };
+
+  const renderDeck = () => {
+    elements.authDeckCards.forEach((card, index) => {
+      const offset = index - deckState.activeIndex;
+      card.classList.remove(
+        "is-active",
+        "is-next",
+        "is-depth-2",
+        "is-depth-3",
+        "is-hidden",
+        "is-flipped-forward",
+        "is-flipped-backward"
+      );
+
+      if (index < deckState.activeIndex) {
+        card.classList.add("is-hidden", "is-flipped-forward");
+        return;
+      }
+
+      if (offset === 0) {
+        card.classList.add("is-active");
+        return;
+      }
+
+      if (offset === 1) {
+        card.classList.add("is-next");
+        return;
+      }
+
+      if (offset === 2) {
+        card.classList.add("is-depth-2");
+        return;
+      }
+
+      if (offset === 3) {
+        card.classList.add("is-depth-3");
+        return;
+      }
+
+      card.classList.add("is-hidden");
+    });
+  };
+
+  const releaseDeckLock = () => {
+    window.setTimeout(() => {
+      deckState.isLocked = false;
+    }, UI_TIMINGS.authDeckFlipMs);
+  };
+
+  const stepDeck = (direction) => {
+    if (deckState.isLocked) {
+      return;
+    }
+
+    if (direction > 0 && deckState.activeIndex >= elements.authDeckCards.length - 1) {
+      return;
+    }
+
+    if (direction < 0 && deckState.activeIndex <= 0) {
+      return;
+    }
+
+    deckState.isLocked = true;
+
+    if (direction > 0) {
+      elements.authDeckCards[deckState.activeIndex]?.classList.add("is-flipped-forward");
+      deckState.activeIndex += 1;
+    } else {
+      deckState.activeIndex -= 1;
+      elements.authDeckCards[deckState.activeIndex]?.classList.add("is-flipped-backward");
+      window.setTimeout(() => {
+        elements.authDeckCards[deckState.activeIndex]?.classList.remove("is-flipped-backward");
+      }, UI_TIMINGS.authDeckFlipMs);
+    }
+
+    renderDeck();
+    releaseDeckLock();
+  };
+
+  elements.authCardDeck.addEventListener("mouseenter", () => {
+    deckState.isHovering = true;
+  });
+
+  elements.authCardDeck.addEventListener("mouseleave", () => {
+    deckState.isHovering = false;
+    deckState.wheelDelta = 0;
+  });
+
+  elements.authCardDeck.addEventListener("wheel", (event) => {
+    if (!isDesktopViewport() || !deckState.isHovering) {
+      return;
+    }
+
+    event.preventDefault();
+    deckState.wheelDelta += event.deltaY;
+    const direction = Math.sign(deckState.wheelDelta);
+
+    if (Math.abs(deckState.wheelDelta) < UI_TIMINGS.authDeckWheelThreshold || !direction) {
+      return;
+    }
+
+    stepDeck(direction);
+    deckState.wheelDelta = 0;
+  }, { passive: false });
+
+  renderDeck();
+}
+
+function initDesktopCursor() {
+  if (!elements.siteCursor) {
+    return;
+  }
+
+  const root = document.documentElement;
+  const cursorState = {
+    x: 0,
+    y: 0,
+    rafId: 0,
+    morphTimer: 0
+  };
+
+  const renderCursor = () => {
+    elements.siteCursor.style.transform = `translate(${cursorState.x}px, ${cursorState.y}px)`;
+    cursorState.rafId = 0;
+  };
+
+  const queueRender = () => {
+    if (cursorState.rafId) {
+      return;
+    }
+
+    cursorState.rafId = window.requestAnimationFrame(renderCursor);
+  };
+
+  const syncDesktopCursorMode = () => {
+    const active = isDesktopViewport();
+    root.classList.toggle("has-desktop-cursor", active);
+    elements.siteCursor.classList.toggle("is-visible", active);
+    if (!active) {
+      elements.siteCursor.classList.remove("is-input", "is-circle");
+    }
+  };
+
+  const setMorphPulse = () => {
+    if (!isDesktopViewport()) {
+      return;
+    }
+
+    elements.siteCursor.classList.add("is-circle");
+    window.clearTimeout(cursorState.morphTimer);
+    cursorState.morphTimer = window.setTimeout(() => {
+      elements.siteCursor.classList.remove("is-circle");
+    }, UI_TIMINGS.cursorMorphMs);
+  };
+
+  document.addEventListener("pointermove", (event) => {
+    if (!isDesktopViewport()) {
+      return;
+    }
+
+    cursorState.x = event.clientX;
+    cursorState.y = event.clientY;
+    queueRender();
+    setMorphPulse();
+  });
+
+  document.addEventListener("pointerdown", () => {
+    if (!isDesktopViewport()) {
+      return;
+    }
+
+    elements.siteCursor.classList.add("is-circle");
+  });
+
+  document.addEventListener("pointerup", () => {
+    if (!isDesktopViewport()) {
+      return;
+    }
+
+    setMorphPulse();
+  });
+
+  document.addEventListener("pointerover", (event) => {
+    if (!isDesktopViewport()) {
+      return;
+    }
+
+    const editable = event.target?.closest?.("input, textarea, select, option, [contenteditable='true']");
+    elements.siteCursor.classList.toggle("is-input", Boolean(editable));
+  });
+
+  document.addEventListener("pointerleave", () => {
+    elements.siteCursor.classList.remove("is-visible");
+  });
+
+  document.addEventListener("pointerenter", () => {
+    if (!isDesktopViewport()) {
+      return;
+    }
+
+    elements.siteCursor.classList.add("is-visible");
+  });
+
+  window.addEventListener("resize", syncDesktopCursorMode);
+  syncDesktopCursorMode();
+}
+
+function initAuthCarousel() {
+  if (!elements.authSlides.length || !elements.authCarouselDots) {
+    return;
+  }
+
+  let activeIndex = 0;
+
+  elements.authCarouselDots.innerHTML = elements.authSlides
+    .map((_, index) => `<button type="button" data-auth-dot="${index}" aria-label="Go to slide ${index + 1}"></button>`)
+    .join("");
+
+  const dots = Array.from(elements.authCarouselDots.querySelectorAll("[data-auth-dot]"));
+
+  const renderSlides = (index) => {
+    activeIndex = index;
+    elements.authSlides.forEach((slide, slideIndex) => {
+      slide.classList.toggle("is-active", slideIndex === activeIndex);
+    });
+
+    dots.forEach((dot, dotIndex) => {
+      dot.classList.toggle("is-active", dotIndex === activeIndex);
+      dot.setAttribute("aria-pressed", String(dotIndex === activeIndex));
+    });
+  };
+
+  dots.forEach((dot, index) => {
+    dot.addEventListener("click", () => {
+      renderSlides(index);
+    });
+  });
+
+  renderSlides(activeIndex);
+
+  window.setInterval(() => {
+    renderSlides((activeIndex + 1) % elements.authSlides.length);
+  }, UI_TIMINGS.authCarouselMs);
+}
+
+function initMobileAuthQuotes() {
+  if (!elements.mobileAuthQuote) {
+    return;
+  }
+
+  const lines = [
+    "Budgeting is just telling your money where it vanished.",
+    "A roommate who says 'I'll pay you later' is basically a side quest.",
+    "If we split equally, my emotional damage should count as a premium add-on.",
+    "Money can't buy happiness, but it can close one awkward UPI reminder thread.",
+    "Quote of the day: trust is good, screenshots are better."
+  ];
+
+  let index = Math.floor(Math.random() * lines.length);
+
+  const renderQuote = () => {
+    elements.mobileAuthQuote.textContent = lines[index];
+    index = (index + 1) % lines.length;
+  };
+
+  renderQuote();
+  window.setInterval(renderQuote, UI_TIMINGS.authQuoteMs);
 }
 
 function bindEvents() {
@@ -1468,6 +1768,10 @@ function roundCurrency(value) {
 
 function isMobileDrawerMode() {
   return window.matchMedia("(max-width: 980px)").matches;
+}
+
+function isDesktopViewport() {
+  return window.matchMedia("(min-width: 981px)").matches;
 }
 
 function generateRoomKeyCandidate() {

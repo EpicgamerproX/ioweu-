@@ -11,80 +11,149 @@
 </head>
 <body>
   <div class="page-shell">
-    <header class="hero">
-      <div class="hero__copy">
-        <p class="eyebrow">Shared money, untangled</p>
-        <h1>Track every room expense without losing the thread.</h1>
-        <p class="hero__text">
-          Log in with your credentials, join rooms with a unique key, and keep a live ledger
-          of who owes whom, what got paid back, and what your spend could have bought instead.
-        </p>
-      </div>
-      <div class="hero__badge-panel">
-        <div class="hero__badge">
-          <span class="hero__badge-label">Room flow</span>
-          <strong>Unique room keys</strong>
-        </div>
-        <div class="hero__badge">
-          <span class="hero__badge-label">Settlement mode</span>
-          <strong>Cash wheel enabled</strong>
-        </div>
-      </div>
-    </header>
-
     <main class="app-grid">
       <section class="panel panel--auth" id="auth-panel">
-        <div class="panel__header">
-          <p class="panel__kicker">Access</p>
-          <h2>Log in or create your account</h2>
-        </div>
-
-        <div class="tabs" role="tablist" aria-label="Authentication options">
-          <button class="tabs__button is-active" id="login-tab" data-tab-target="login-view" type="button" role="tab" aria-selected="true">Login</button>
-          <button class="tabs__button" id="signup-tab" data-tab-target="signup-view" type="button" role="tab" aria-selected="false">Sign up</button>
-        </div>
-
-        <div class="tab-panel is-active" id="login-view" role="tabpanel" aria-labelledby="login-tab">
-          <form id="login-form" class="stack">
-            <label class="field">
-              <span>Email</span>
-              <input id="login-email" name="email" type="email" autocomplete="email" placeholder="aditi@example.com" required>
-            </label>
-            <label class="field">
-              <span>Password</span>
-              <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Enter password" required>
-            </label>
-            <button class="button button--primary" type="submit">Enter dashboard</button>
-          </form>
-        </div>
-
-        <div class="tab-panel" id="signup-view" role="tabpanel" aria-labelledby="signup-tab" hidden>
-          <form id="signup-form" class="stack">
-            <div class="grid-2">
-              <label class="field">
-                <span>Your name</span>
-                <input id="signup-display-name" name="displayName" type="text" autocomplete="name" placeholder="Rohan" required>
-              </label>
-              <label class="field">
-                <span>Email</span>
-                <input id="signup-email" name="email" type="email" autocomplete="email" placeholder="rohan@example.com" required>
-              </label>
+        <div class="auth-layout">
+          <div class="auth-card">
+            <div class="panel__header auth-card__header">
+              <p class="panel__kicker">Access</p>
+              <h2>Login / Sign up</h2>
+              <p class="auth-card__text">Dark mode, loud borders, zero fluff.</p>
             </div>
-            <div class="grid-2">
-              <label class="field">
-                <span>Password</span>
-                <input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="Choose a password" required>
-              </label>
-              <label class="field">
-                <span>Display currency</span>
-                <input id="signup-currency" name="currency" type="text" maxlength="3" value="INR" required>
-              </label>
-            </div>
-            <button class="button button--accent" type="submit">Create account</button>
-          </form>
-        </div>
 
-        <p class="status-message" id="auth-status" aria-live="polite"></p>
+            <div class="tabs" role="tablist" aria-label="Authentication options">
+              <button class="tabs__button is-active" id="login-tab" data-tab-target="login-view" type="button" role="tab" aria-selected="true">Login</button>
+              <button class="tabs__button" id="signup-tab" data-tab-target="signup-view" type="button" role="tab" aria-selected="false">Sign up</button>
+            </div>
+
+            <div class="tab-panel is-active" id="login-view" role="tabpanel" aria-labelledby="login-tab">
+              <form id="login-form" class="stack">
+                <label class="field">
+                  <span>Email</span>
+                  <input id="login-email" name="email" type="email" autocomplete="email" placeholder="aditi@example.com" required>
+                </label>
+                <label class="field">
+                  <span>Password</span>
+                  <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Enter password" required>
+                </label>
+                <button class="button button--primary" type="submit">Enter dashboard</button>
+              </form>
+            </div>
+
+            <div class="tab-panel" id="signup-view" role="tabpanel" aria-labelledby="signup-tab" hidden>
+              <form id="signup-form" class="stack">
+                <div class="grid-2">
+                  <label class="field">
+                    <span>Your name</span>
+                    <input id="signup-display-name" name="displayName" type="text" autocomplete="name" placeholder="Rohan" required>
+                  </label>
+                  <label class="field">
+                    <span>Email</span>
+                    <input id="signup-email" name="email" type="email" autocomplete="email" placeholder="rohan@example.com" required>
+                  </label>
+                </div>
+                <div class="grid-2">
+                  <label class="field">
+                    <span>Password</span>
+                    <input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="Choose a password" required>
+                  </label>
+                  <label class="field">
+                    <span>Display currency</span>
+                    <input id="signup-currency" name="currency" type="text" maxlength="3" value="INR" required>
+                  </label>
+                </div>
+                <button class="button button--accent" type="submit">Create account</button>
+              </form>
+            </div>
+
+            <p class="status-message" id="auth-status" aria-live="polite"></p>
+
+            <div class="auth-mobile-note" aria-live="polite">
+              <p class="auth-mobile-note__label">Tiny screen energy</p>
+              <blockquote class="auth-mobile-note__quote" id="mobile-auth-quote">
+                Loading a very serious quote...
+              </blockquote>
+            </div>
+          </div>
+
+          <aside class="auth-showcase" aria-label="Visual showcase">
+            <div class="auth-carousel">
+              <div class="auth-carousel__track" id="auth-carousel-track">
+                <article class="auth-slide auth-slide--one is-active" data-slide>
+                  <div class="auth-slide__content">
+                    <p class="auth-slide__tag">Slide 01</p>
+                    <h3>Split the chaos.</h3>
+                    <p>Chunky cards, loud colors, no polite little shadows pretending to be design.</p>
+                  </div>
+                </article>
+                <article class="auth-slide auth-slide--two" data-slide>
+                  <div class="auth-slide__content">
+                    <p class="auth-slide__tag">Slide 02</p>
+                    <h3>Track every rupee.</h3>
+                    <p>Keep the room key close and the debt board closer.</p>
+                  </div>
+                </article>
+                <article class="auth-slide auth-slide--three" data-slide>
+                  <div class="auth-slide__content">
+                    <p class="auth-slide__tag">Slide 03</p>
+                    <h3>Neobrutal, but useful.</h3>
+                    <p>Hard edges, glowing gradients, and enough contrast to punch through the dark.</p>
+                  </div>
+                </article>
+              </div>
+              <div class="auth-carousel__dots" id="auth-carousel-dots" aria-label="Carousel progress"></div>
+            </div>
+
+            <section class="auth-card-deck" id="auth-card-deck" aria-label="Abstract card deck">
+              <div class="auth-card-deck__meta">
+                <span class="auth-card-deck__label">Flip deck</span>
+                <p>Scroll here to peel back each layer.</p>
+              </div>
+              <div class="auth-card-deck__stack" id="auth-card-deck-stack">
+                <article class="deck-card deck-card--one is-active" data-deck-card>
+                  <div class="deck-card__face deck-card__face--front">
+                    <span class="deck-card__index">Card 01</span>
+                    <strong>Night Ledger</strong>
+                  </div>
+                  <div class="deck-card__face deck-card__face--back">
+                    <span class="deck-card__index">Back 01</span>
+                    <strong>Green pulse</strong>
+                  </div>
+                </article>
+                <article class="deck-card deck-card--two" data-deck-card>
+                  <div class="deck-card__face deck-card__face--front">
+                    <span class="deck-card__index">Card 02</span>
+                    <strong>Debt Mirage</strong>
+                  </div>
+                  <div class="deck-card__face deck-card__face--back">
+                    <span class="deck-card__index">Back 02</span>
+                    <strong>Red echo</strong>
+                  </div>
+                </article>
+                <article class="deck-card deck-card--three" data-deck-card>
+                  <div class="deck-card__face deck-card__face--front">
+                    <span class="deck-card__index">Card 03</span>
+                    <strong>Room Signal</strong>
+                  </div>
+                  <div class="deck-card__face deck-card__face--back">
+                    <span class="deck-card__index">Back 03</span>
+                    <strong>Blue drift</strong>
+                  </div>
+                </article>
+                <article class="deck-card deck-card--four" data-deck-card>
+                  <div class="deck-card__face deck-card__face--front">
+                    <span class="deck-card__index">Card 04</span>
+                    <strong>Split Static</strong>
+                  </div>
+                  <div class="deck-card__face deck-card__face--back">
+                    <span class="deck-card__index">Back 04</span>
+                    <strong>Violet break</strong>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </aside>
+        </div>
       </section>
 
       <section class="panel panel--workspace" id="workspace-panel" hidden>
@@ -424,6 +493,10 @@
         <button class="button button--danger" id="delete-vote-confirm" type="button">Vote to delete</button>
       </div>
     </div>
+  </div>
+
+  <div class="site-cursor" id="site-cursor" aria-hidden="true">
+    <div class="site-cursor__shape"></div>
   </div>
 
   <script src="/api/env.js"></script>
