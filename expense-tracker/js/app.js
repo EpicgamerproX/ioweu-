@@ -140,7 +140,7 @@ const invitePanel = new InviteSidePanel(elements.inviteSidePanelRoot, {
 
 function init() {
   state.pendingJoinRoomId = getJoinRouteRoomId();
-  bindEvents();
+  bindEvents(); 
   setDefaultDate();
   primeJoinRouteStatus();
   restoreSession();
