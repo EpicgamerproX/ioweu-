@@ -1969,6 +1969,7 @@ tbody tr:last-child td {
   }
 
   .button,
+  .button--ghost,
   .tabs__button,
   .field input,
   .field select,
