@@ -227,12 +227,12 @@
               <span>Active room</span>
               <select id="group-select"></select>
             </label>
-            <p class="group-strip__room-id" id="active-room-id-display">Room ID: --------</p>
+            <p class="group-strip__room-id" id="active-room-id-display">Room key: --------</p>
           </div>
           <div class="room-actions">
             <button class="button button--accent" id="create-room-toggle" type="button">Create room</button>
             <form id="join-room-form" class="inline-form">
-              <input id="join-room-key" name="roomKey" type="text" placeholder="Enter room id" maxlength="12" required>
+              <input id="join-room-key" name="roomKey" type="text" placeholder="Enter room key" maxlength="12" required>
               <button class="button button--ghost" type="submit">Join room</button>
             </form>
           </div>
@@ -242,7 +242,7 @@
           <div class="section-heading">
             <div>
               <p class="panel__kicker">Create room</p>
-              <h3>Name a room and generate its invite</h3>
+              <h3>Name a room and set its key</h3>
             </div>
           </div>
           <form id="create-room-form" class="stack">
@@ -250,7 +250,11 @@
               <span>Room name</span>
               <input id="create-room-name" name="roomName" type="text" placeholder="Weekend Trip" required>
             </label>
-            <p class="room-creator__note">A unique room ID and invite link will be generated automatically.</p>
+            <label class="field">
+              <span>Room key</span>
+              <input id="create-room-key" name="roomKey" type="text" placeholder="TRIP#9" maxlength="12" required>
+            </label>
+            <p class="room-creator__note">Use 6-12 characters with at least 1 capital letter, 1 number, and 1 symbol.</p>
             <div class="room-creator__actions">
               <button class="button button--ghost" id="create-room-cancel" type="button">Cancel</button>
               <button class="button button--primary" type="submit">Create room</button>

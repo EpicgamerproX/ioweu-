@@ -70,6 +70,7 @@ const elements = {
   createRoomToggle: document.querySelector("#create-room-toggle"),
   createRoomCancel: document.querySelector("#create-room-cancel"),
   createRoomName: document.querySelector("#create-room-name"),
+  createRoomKey: document.querySelector("#create-room-key"),
   createRoomStatus: document.querySelector("#create-room-status"),
   joinRoomForm: document.querySelector("#join-room-form"),
   welcomeTitle: document.querySelector("#welcome-title"),
@@ -456,6 +457,11 @@ function bindEvents() {
   if (elements.createRoomForm) {
     elements.createRoomForm.addEventListener("submit", handleCreateRoom);
   }
+  if (elements.createRoomKey) {
+    elements.createRoomKey.addEventListener("input", () => {
+      elements.createRoomKey.value = normalizeRoomKey(elements.createRoomKey.value);
+    });
+  }
   if (elements.createRoomCancel) {
     elements.createRoomCancel.addEventListener("click", closeCreateRoomPanel);
   }
@@ -612,7 +618,7 @@ async function bootstrapWorkspace() {
       state.deleteVote = null;
       await syncRoomRealtimeSubscription();
       renderGroups();
-      renderEmptyWorkspace("You are not part of any rooms yet. Create a room or join one with a room ID.");
+      renderEmptyWorkspace("You are not part of any rooms yet. Create a room or join one with a room key.");
       await maybeAutoJoinPendingRoom();
       saveSession();
       return;
@@ -658,10 +664,20 @@ async function handleCreateRoom(event) {
 
   const formData = new FormData(event.currentTarget);
   const roomName = String(formData.get("roomName") || "").trim();
-  const roomKey = "";
+  const roomKey = normalizeRoomKey(String(formData.get("roomKey") || ""));
 
   if (!roomName) {
     setStatus(elements.createRoomStatus, "Enter a room name.");
+    return;
+  }
+
+  const roomKeyError = validateRoomKey(roomKey);
+  if (roomKeyError) {
+    setStatus(elements.createRoomStatus, roomKeyError);
+    if (elements.createRoomKey) {
+      elements.createRoomKey.value = roomKey;
+      elements.createRoomKey.focus();
+    }
     return;
   }
 
@@ -683,7 +699,7 @@ async function handleCreateRoom(event) {
     await loadActiveGroupData();
     saveSession();
     await renderInvitePanel();
-    setStatus(elements.expenseStatus, `Created ${created.name}. Room ID: ${created.roomId || created.room_key}.`);
+    setStatus(elements.expenseStatus, `Created ${created.name}. Room key: ${created.roomId || created.room_key}.`);
   } catch (error) {
     setStatus(elements.createRoomStatus, error.message || "Could not create room.");
   }
@@ -791,8 +807,8 @@ function renderDrawer() {
   const roomKey = getGroupRoomKey(activeGroup);
   elements.toggleRoomKey.textContent = roomKey;
   elements.activeRoomIdDisplay.textContent = activeGroup
-    ? `Room ID: ${roomKey}`
-    : "Room ID: --------";
+    ? `Room key: ${roomKey}`
+    : "Room key: --------";
   elements.drawerRoomName.textContent = activeGroup
     ? `${activeGroup.name} room`
     : "No room selected";
@@ -850,7 +866,7 @@ function renderEmptyWorkspace(message) {
   elements.drawerRoomName.textContent = message;
   elements.mobileDrawerRoomName.textContent = message;
   elements.activeRoomChip.textContent = "No room selected";
-  elements.activeRoomIdDisplay.textContent = "Room ID: --------";
+  elements.activeRoomIdDisplay.textContent = "Room key: --------";
   elements.deleteVoteStatus.textContent = "No delete vote is active.";
   elements.mobileDeleteVoteStatus.textContent = "No delete vote is active.";
   closeDeleteVoteModal();
@@ -1205,6 +1221,9 @@ function openCreateRoomPanel() {
 
   elements.createRoomPanel.hidden = false;
   elements.createRoomName.value = "";
+  if (elements.createRoomKey) {
+    elements.createRoomKey.value = "";
+  }
   if (elements.createRoomStatus) {
     setStatus(elements.createRoomStatus, "");
   }
@@ -1456,6 +1475,38 @@ function getActiveGroup() {
 
 function getGroupRoomKey(group) {
   return group?.room_key || "--------";
+}
+
+function normalizeRoomKey(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function validateRoomKey(roomKey) {
+  if (!roomKey) {
+    return "Enter a room key.";
+  }
+
+  if (roomKey.length < 6) {
+    return "Room key must be at least 6 characters.";
+  }
+
+  if (roomKey.length > 12) {
+    return "Room key must be 12 characters or fewer.";
+  }
+
+  if (!/[A-Z]/.test(roomKey)) {
+    return "Room key must include at least 1 capital letter.";
+  }
+
+  if (!/\d/.test(roomKey)) {
+    return "Room key must include at least 1 number.";
+  }
+
+  if (!/[^A-Z0-9]/.test(roomKey)) {
+    return "Room key must include at least 1 symbol.";
+  }
+
+  return "";
 }
 
 async function syncRoomRealtimeSubscription(targetGroupId = state.activeGroupId) {

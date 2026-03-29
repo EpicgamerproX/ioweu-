@@ -413,8 +413,40 @@ declare
   resolved_base_url text;
 begin
   current_member_id := public.require_valid_session(session_token_input);
-  resolved_room_key := public.generate_room_key();
+  resolved_room_key := upper(trim(coalesce(room_key_input, '')));
   resolved_base_url := trim(coalesce(app_base_url_input, ''));
+
+  if resolved_room_key = '' then
+    raise exception 'Room key is required';
+  end if;
+
+  if char_length(resolved_room_key) < 6 then
+    raise exception 'Room key must be at least 6 characters';
+  end if;
+
+  if char_length(resolved_room_key) > 12 then
+    raise exception 'Room key must be 12 characters or fewer';
+  end if;
+
+  if resolved_room_key !~ '[A-Z]' then
+    raise exception 'Room key must include at least 1 capital letter';
+  end if;
+
+  if resolved_room_key !~ '[0-9]' then
+    raise exception 'Room key must include at least 1 number';
+  end if;
+
+  if resolved_room_key !~ '[^A-Z0-9]' then
+    raise exception 'Room key must include at least 1 symbol';
+  end if;
+
+  if exists (
+    select 1
+    from public.groups
+    where room_key = resolved_room_key
+  ) then
+    raise exception 'Room key is already taken';
+  end if;
 
   resolved_currency := upper(coalesce(
     nullif(trim(preferred_currency), ''),
@@ -449,6 +481,9 @@ begin
         else rtrim(resolved_base_url, '/') || '/join/' || resolved_room_key
       end
   );
+exception
+  when unique_violation then
+    raise exception 'Room key is already taken';
 end;
 $$;
 
