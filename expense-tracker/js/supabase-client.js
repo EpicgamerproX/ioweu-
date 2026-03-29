@@ -117,7 +117,7 @@ export async function createGroupForMember(sessionToken, { roomName, roomKey, cu
       new_group_name: roomName.trim(),
       room_key_input: roomKey.trim().toUpperCase(),
       app_base_url_input: APP_CONFIG.appBaseUrl,
-      preferred_currency: (currency || "").trim().toUpperCase()
+      preferred_currency_input: (currency || "").trim().toUpperCase()
     }),
     "Unable to create room."
   );
