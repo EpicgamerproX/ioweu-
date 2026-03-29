@@ -2042,14 +2042,6 @@ tbody tr:last-child td {
 }
 
 @media (min-width: 981px) {
-  .panel--workspace {
-    padding-right: calc(var(--drawer-desktop-width) + 52px);
-  }
-
-  .workspace-skeleton {
-    right: calc(var(--drawer-desktop-width) + 52px);
-  }
-
   html.has-desktop-cursor,
   html.has-desktop-cursor body,
   html.has-desktop-cursor button,
