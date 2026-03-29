@@ -271,6 +271,9 @@ body.is-cash-selector-locked {
 .button--ghost {
   background: #2c2c3b;
   color: var(--text);
+  box-shadow: 4px 4px 0 #000000;
+  border-radius: 12px;
+  border: #000000 3px solid;
 }
 
 .button--danger {
