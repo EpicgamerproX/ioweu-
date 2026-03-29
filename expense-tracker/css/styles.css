@@ -1840,11 +1840,21 @@ tbody tr:last-child td {
   }
 
   .member-drawer__toggle {
-    width: auto;
-    border-radius: 999px;
+    width: 100%;
+    border-radius: 22px;
     background: linear-gradient(135deg, rgba(18, 18, 27, 0.98), rgba(34, 18, 43, 0.98));
     border: 3px solid var(--line);
     box-shadow: var(--shadow-soft);
+    display: grid;
+    gap: 8px;
+  }
+
+  .member-drawer__toggle strong,
+  .member-drawer__toggle .toggle-room-key {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: break-word;
   }
 
   .member-drawer__scrim,
@@ -1973,7 +1983,23 @@ tbody tr:last-child td {
   }
 
   .member-drawer__toggle {
-    padding: 16px 18px;
+    width: 100%;
+    padding: 16px 16px 18px;
+    gap: 7px;
+  }
+
+  .member-drawer__toggle strong {
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .member-drawer__label {
+    margin-bottom: 0;
+  }
+
+  .toggle-room-key {
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
   }
 
   .amount-builder__actions {
