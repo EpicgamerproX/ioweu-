@@ -1181,7 +1181,7 @@ tbody tr:last-child td {
 
 .member-drawer.is-open .member-drawer__panel {
   max-height: calc(100vh - 120px);
-  padding: 0 22px 22px;
+  padding: 18px 22px 22px;
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
@@ -1190,6 +1190,10 @@ tbody tr:last-child td {
 
 .member-drawer__panel > * {
   width: 100%;
+}
+
+.member-drawer__panel > :first-child {
+  margin-top: 2px;
 }
 
 .mobile-member-drawer {
@@ -2038,6 +2042,14 @@ tbody tr:last-child td {
 }
 
 @media (min-width: 981px) {
+  .panel--workspace {
+    padding-right: calc(var(--drawer-desktop-width) + 52px);
+  }
+
+  .workspace-skeleton {
+    right: calc(var(--drawer-desktop-width) + 52px);
+  }
+
   html.has-desktop-cursor,
   html.has-desktop-cursor body,
   html.has-desktop-cursor button,
