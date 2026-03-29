@@ -92,6 +92,18 @@ export class CashSelector {
   }
 
   bindEvents() {
+    this.root.addEventListener("selectstart", (event) => {
+      event.preventDefault();
+    });
+
+    this.root.addEventListener("dragstart", (event) => {
+      event.preventDefault();
+    });
+
+    this.root.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+    });
+
     this.elements.buttons.forEach((button) => {
       button.addEventListener("pointerdown", (event) => this.handleButtonPointerDown(event, button));
       button.addEventListener("pointermove", (event) => this.handleButtonPointerMove(event));
