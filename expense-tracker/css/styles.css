@@ -17,9 +17,9 @@
   --radius-xl: 24px;
   --radius-lg: 20px;
   --radius-md: 16px;
-  --drawer-collapsed: 112px;
+  --drawer-collapsed: 176px;
   --drawer-expanded: min(33vw, 420px);
-  --drawer-desktop-width: min(28vw, 360px);
+  --drawer-desktop-width: min(34vw, 440px);
 }
 
 * {
@@ -953,7 +953,7 @@ tbody tr:last-child td {
 .history-list,
 .member-drawer__panel {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .participant-row,
@@ -1116,19 +1116,23 @@ tbody tr:last-child td {
 
 .member-drawer__toggle {
   width: 100%;
-  padding: 18px 20px;
+  padding: 18px 22px 20px;
   background: linear-gradient(135deg, rgba(18, 18, 27, 0.98), rgba(34, 18, 43, 0.98));
   color: #f7f8ff;
   border-bottom: 3px solid #000000;
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
   text-align: left;
   cursor: pointer;
+  display: grid;
+  gap: 6px;
+  align-content: start;
 }
 
 .member-drawer__toggle strong {
   display: block;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 1.05rem;
+  font-size: 1.08rem;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1136,7 +1140,7 @@ tbody tr:last-child td {
 
 .toggle-room-key {
   display: block !important;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 700;
   font-family: "Space Grotesk", monospace;
   color: var(--text);
@@ -1145,7 +1149,7 @@ tbody tr:last-child td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 4px;
+  margin-top: 2px;
   opacity: 1;
   font-feature-settings: "tnum" 1; /* Tabular numbers for keys */
 }
@@ -1167,7 +1171,7 @@ tbody tr:last-child td {
 
 .member-drawer__panel {
   max-height: 0;
-  padding: 0 18px;
+  padding: 0 22px;
   opacity: 0;
   transform: translateY(-8px);
   pointer-events: none;
@@ -1177,11 +1181,15 @@ tbody tr:last-child td {
 
 .member-drawer.is-open .member-drawer__panel {
   max-height: calc(100vh - 120px);
-  padding: 0 18px 18px;
+  padding: 0 22px 22px;
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
   overflow: auto;
+}
+
+.member-drawer__panel > * {
+  width: 100%;
 }
 
 .mobile-member-drawer {
@@ -1252,6 +1260,7 @@ tbody tr:last-child td {
 
 .equivalent-grid--drawer {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .drawer-logout {
@@ -1261,8 +1270,8 @@ tbody tr:last-child td {
 .room-governance {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 18px;
+  gap: 14px;
+  padding: 20px;
 }
 
 .room-governance__copy {
