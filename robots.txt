@@ -1,0 +1,17 @@
+# robots.txt – ioweu Group Expense Tracker
+
+User-agent: *
+Allow: /
+Allow: /expense-tracker/
+
+# Block internal API and config paths
+Disallow: /api/
+Disallow: /expense-tracker/supabase/
+Disallow: /expense-tracker/js/
+Disallow: /expense-tracker/css/
+Disallow: /expense-tracker/docs/
+Disallow: /expense-tracker/.env
+Disallow: /expense-tracker/.env.example
+
+# Sitemap location
+Sitemap: https://ioweu.vercel.app/sitemap.xml
