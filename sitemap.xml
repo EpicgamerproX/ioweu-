@@ -3,7 +3,7 @@
 
   <!-- Root (redirects to expense-tracker) -->
   <url>
-    <loc>https://ioweu.vercel.app/</loc>
+    <loc>https://ioweu.co.in/</loc>
     <lastmod>2026-05-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -11,7 +11,7 @@
 
   <!-- Main app page -->
   <url>
-    <loc>https://ioweu.vercel.app/expense-tracker/</loc>
+    <loc>https://ioweu.co.in/expense-tracker/</loc>
     <lastmod>2026-05-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
