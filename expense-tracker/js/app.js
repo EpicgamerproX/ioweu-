@@ -604,19 +604,12 @@ async function bootstrapWorkspace() {
     return;
   }
 
-  elements.workspacePanel.hidden = false;
   elements.authPanel.classList.add("is-exiting");
-  await new Promise((resolve) => {
-    const onEnd = () => {
-      elements.authPanel.removeEventListener("animationend", onEnd);
-      elements.authPanel.hidden = true;
-      elements.authPanel.classList.remove("is-exiting");
-      resolve();
-    };
-    elements.authPanel.addEventListener("animationend", onEnd);
-    // Fallback in case animationend never fires
-    window.setTimeout(onEnd, 480);
-  });
+  elements.workspacePanel.hidden = false;
+  window.setTimeout(() => {
+    elements.authPanel.hidden = true;
+    elements.authPanel.classList.remove("is-exiting");
+  }, 420);
   elements.welcomeTitle.textContent = `${state.currentMember.display_name}'s dashboard`;
   elements.drawerName.textContent = state.currentMember.display_name;
   elements.drawerTitle.textContent = `${state.currentMember.display_name}'s spend story`;
