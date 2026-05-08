@@ -177,6 +177,10 @@ select {
   pointer-events: none;
 }
 
+.panel--auth[hidden] {
+  display: none !important;
+}
+
 .panel--workspace {
   padding-top: 36px;
   overflow: hidden;
