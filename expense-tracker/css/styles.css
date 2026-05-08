@@ -149,6 +149,11 @@ select {
   padding: 24px;
 }
 
+@keyframes auth-exit {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-48px) scale(0.97); }
+}
+
 .panel--auth {
   min-height: calc(100vh - 56px);
   display: grid;
@@ -157,6 +162,12 @@ select {
   background:
     linear-gradient(135deg, rgba(9, 9, 15, 0.96), rgba(20, 16, 30, 0.96)),
     var(--surface);
+  transition: opacity 380ms ease, transform 380ms ease;
+}
+
+.panel--auth.is-exiting {
+  animation: auth-exit 420ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  pointer-events: none;
 }
 
 .panel--workspace {
