@@ -300,21 +300,33 @@
         </section>
 
         <div class="summary-grid" id="summary-grid">
-          <article class="metric-card">
-            <span class="metric-card__label">Others owe you</span>
-            <strong id="owed-to-you">Rs0.00</strong>
+          <article class="metric-card metric-card--owed">
+            <div class="metric-card__icon">↑</div>
+            <div class="metric-card__content">
+              <span class="metric-card__label">Owed to you</span>
+              <strong id="owed-to-you">Rs0.00</strong>
+            </div>
           </article>
-          <article class="metric-card">
-            <span class="metric-card__label">You owe others</span>
-            <strong id="you-owe">Rs0.00</strong>
+          <article class="metric-card metric-card--debt">
+            <div class="metric-card__icon">↓</div>
+            <div class="metric-card__content">
+              <span class="metric-card__label">You owe</span>
+              <strong id="you-owe">Rs0.00</strong>
+            </div>
           </article>
-          <article class="metric-card">
-            <span class="metric-card__label">Net balance</span>
-            <strong id="net-balance">Rs0.00</strong>
+          <article class="metric-card metric-card--net">
+            <div class="metric-card__icon">±</div>
+            <div class="metric-card__content">
+              <span class="metric-card__label">Net Balance</span>
+              <strong id="net-balance">Rs0.00</strong>
+            </div>
           </article>
-          <article class="metric-card">
-            <span class="metric-card__label">My paid spend</span>
-            <strong id="total-spent">Rs0.00</strong>
+          <article class="metric-card metric-card--total">
+            <div class="metric-card__icon">∑</div>
+            <div class="metric-card__content">
+              <span class="metric-card__label">Total Spent</span>
+              <strong id="total-spent">Rs0.00</strong>
+            </div>
           </article>
         </div>
 
@@ -322,21 +334,11 @@
           <div class="section-heading">
             <div>
               <p class="panel__kicker">Debt board</p>
-              <h3>Everything you currently owe in this room</h3>
+              <h3>Active Balances</h3>
             </div>
           </div>
-          <div class="table-shell table-shell--ledger">
-            <table>
-              <thead>
-                <tr>
-                  <th>Person I owe</th>
-                  <th>Amount</th>
-                  <th>Expense date</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody id="debt-table-body"></tbody>
-            </table>
+          <div class="modern-list" id="debt-table-body">
+            <!-- Dynamic cards will be injected here -->
           </div>
         </section>
 
@@ -479,6 +481,20 @@
         </section>
       </section>
     </main>
+
+    <button class="fab" id="fab-add-expense" aria-label="Add Expense">
+      <span class="fab__icon">+</span>
+    </button>
+  </div>
+
+  <div class="modal-overlay" id="expense-modal-overlay" hidden>
+    <div class="modal-content panel">
+      <div class="modal-header">
+        <h3>Add Expense</h3>
+        <button class="modal-close" id="expense-modal-close">&times;</button>
+      </div>
+      <!-- Original expense form will be moved here in JS or kept here -->
+    </div>
   </div>
 
   <div id="invite-side-panel-root"></div>
